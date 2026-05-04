@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-from typing import Any
-
 import redis
 
 from safety.types import OrderRecord
@@ -21,6 +19,8 @@ class StateStore:
         if record.is_open:
             self._r.sadd(_OPEN_ORDERS_KEY, record.client_order_id)
             self._r.sadd(_STRATEGY_ORDERS_KEY.format(strategy_id=record.strategy_id), record.client_order_id)
+        else:
+            self._r.srem(_OPEN_ORDERS_KEY, record.client_order_id)
 
     def get_order(self, client_order_id: str) -> OrderRecord | None:
         key = _ORDER_KEY.format(client_order_id=client_order_id)
@@ -48,14 +48,20 @@ class StateStore:
         return records
 
     def mark_order_filled(self, client_order_id: str, filled: int) -> None:
+        record = self.get_order(client_order_id)
         key = _ORDER_KEY.format(client_order_id=client_order_id)
         self._r.hset(key, mapping={"status": "filled", "filled": str(filled)})
         self._r.srem(_OPEN_ORDERS_KEY, client_order_id)
+        if record:
+            self._r.srem(_STRATEGY_ORDERS_KEY.format(strategy_id=record.strategy_id), client_order_id)
 
     def mark_order_canceled(self, client_order_id: str) -> None:
+        record = self.get_order(client_order_id)
         key = _ORDER_KEY.format(client_order_id=client_order_id)
         self._r.hset(key, mapping={"status": "canceled"})
         self._r.srem(_OPEN_ORDERS_KEY, client_order_id)
+        if record:
+            self._r.srem(_STRATEGY_ORDERS_KEY.format(strategy_id=record.strategy_id), client_order_id)
 
     @staticmethod
     def _record_to_dict(record: OrderRecord) -> dict[str, str]:

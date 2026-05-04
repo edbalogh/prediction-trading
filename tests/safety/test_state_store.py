@@ -1,4 +1,5 @@
 import pytest
+import dataclasses
 import fakeredis
 from safety.state_store import StateStore
 from safety.types import OrderRecord
@@ -120,3 +121,44 @@ def test_get_orders_by_strategy(store):
     arb_orders = store.get_orders_by_strategy("stat_arb")
     assert len(arb_orders) == 1
     assert arb_orders[0].client_order_id == "clord-a"
+
+
+def test_save_order_twice_removes_from_open_set(store):
+    record = OrderRecord(
+        client_order_id="clord-001",
+        kalshi_order_id="kalshi-abc",
+        ticker="KXBTC15M-X",
+        strategy_id="stat_arb",
+        side="yes",
+        price_cents=55,
+        quantity=10,
+        filled=0,
+        status="open",
+    )
+    store.save_order(record)
+    assert len(store.get_open_orders()) == 1
+    # Now save same order with filled status
+    closed = dataclasses.replace(record, status="filled", filled=10)
+    store.save_order(closed)
+    assert len(store.get_open_orders()) == 0
+
+
+def test_get_order_returns_none_for_unknown_id(store):
+    assert store.get_order("nonexistent") is None
+
+
+def test_mark_filled_removes_from_strategy_orders(store):
+    store.save_order(OrderRecord(
+        client_order_id="clord-001",
+        kalshi_order_id="kalshi-abc",
+        ticker="KXBTC15M-X",
+        strategy_id="stat_arb",
+        side="yes",
+        price_cents=55,
+        quantity=10,
+        filled=0,
+        status="open",
+    ))
+    store.mark_order_filled("clord-001", filled=10)
+    orders = store.get_orders_by_strategy("stat_arb")
+    assert len(orders) == 0
