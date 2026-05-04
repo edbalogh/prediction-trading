@@ -108,11 +108,17 @@ class CatalogBuilder:
             count_raw = row.get("count_fp")
             if count_raw is None or (isinstance(count_raw, float) and pd.isna(count_raw)):
                 continue
+            # Kalshi began returning fractional lot sizes (e.g. 0.7 contracts) from ~2026-04-16.
+            # Round to nearest whole contract for now; skip sub-0.5 lots (they'd round to 0
+            # which NautilusTrader rejects as an invalid Quantity).
+            size_int = round(float(str(count_raw)))
+            if size_int < 1:
+                continue
             instrument_id = InstrumentId(Symbol(str(row["ticker"])), KALSHI_VENUE)
             ticks.append(TradeTick(
                 instrument_id=instrument_id,
                 price=Price(round(price_val, 2), 2),
-                size=Quantity(int(float(str(count_raw))), 0),
+                size=Quantity(size_int, 0),
                 aggressor_side=taker_side_to_aggressor(str(taker_raw)),
                 trade_id=TradeId(str(row["trade_id"])),
                 ts_event=parse_ts_ns(str(row["created_time"])),
