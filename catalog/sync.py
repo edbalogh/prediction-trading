@@ -166,3 +166,42 @@ class CatalogBuilder:
         _logger.info("sync_candlesticks_file: wrote %d bars from %s", len(bars), parquet_path)
         self._mark_synced(parquet_path)
         return len(bars)
+
+    # ── Crypto Bars → Bar ─────────────────────────────────────────────────────
+
+    def sync_crypto_bars_file(self, parquet_path: str) -> int:
+        df = pd.read_parquet(parquet_path)
+        bars: list[Bar] = []
+        spec = BarSpecification(1, BarAggregation.MINUTE, PriceType.LAST)
+        for _, row in df.iterrows():
+            try:
+                open_val  = float(row["open"])
+                high_val  = float(row["high"])
+                low_val   = float(row["low"])
+                close_val = float(row["close"])
+                vol_val   = float(row["volume"])
+            except (ValueError, TypeError, KeyError):
+                continue
+            # Clamp OHLC to satisfy NautilusTrader invariants (low <= open/close <= high).
+            # Exchange data can have minor floating-point inconsistencies.
+            low_clamped  = round(min(open_val, high_val, low_val, close_val), 2)
+            high_clamped = round(max(open_val, high_val, low_val, close_val), 2)
+            instrument_id = InstrumentId(Symbol(str(row["symbol"])), CRYPTO_VENUE)
+            bar_type = BarType(instrument_id, spec)
+            ts_event = parse_ts_ns(int(row["open_time"]), unit="ms")
+            bars.append(Bar(
+                bar_type=bar_type,
+                open=Price(round(open_val, 2), 2),
+                high=Price(high_clamped, 2),
+                low=Price(low_clamped, 2),
+                close=Price(round(close_val, 2), 2),
+                volume=Quantity(int(vol_val * 1000), 3),
+                ts_event=ts_event,
+                ts_init=ts_event,
+            ))
+        if bars:
+            bars.sort(key=lambda b: b.ts_event)
+            self._catalog.write_data(bars)
+        _logger.info("sync_crypto_bars_file: wrote %d bars from %s", len(bars), parquet_path)
+        self._mark_synced(parquet_path)
+        return len(bars)

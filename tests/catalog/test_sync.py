@@ -281,3 +281,108 @@ def test_sync_candlesticks_marks_file_as_synced(tmp_catalog, tmp_path):
         catalog_path=tmp_catalog._catalog_path,
     )
     assert rebuilt.is_synced(parquet_path) is True
+
+
+def _write_crypto_bars_parquet(path: str, rows: list[dict]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    pd.DataFrame(rows).to_parquet(path, index=False)
+
+
+def test_sync_crypto_bars_file_writes_bars(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "crypto_bars" / "symbol=BTC-USD" / "date=2026-02-16" / "part.parquet")
+    _write_crypto_bars_parquet(parquet_path, [
+        {
+            "open_time": 1_771_218_000_000,   # Unix milliseconds
+            "open": 68830.14,
+            "high": 68863.96,
+            "low": 68802.66,
+            "close": 68802.66,
+            "volume": 6.364871,
+            "close_time": 1_771_218_060_000,
+            "quote_volume": 437920.060861,
+            "symbol": "BTC-USD",
+        },
+        {
+            "open_time": 1_771_218_060_000,
+            "open": 68802.66,
+            "high": 68834.97,
+            "low": 68806.68,
+            "close": 68830.14,
+            "volume": 2.123524,
+            "close_time": 1_771_218_120_000,
+            "quote_volume": 146162.488628,
+            "symbol": "BTC-USD",
+        },
+    ])
+    count = tmp_catalog.sync_crypto_bars_file(parquet_path)
+    assert count == 2
+
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    bars = catalog.bars(instrument_ids=["BTC-USD.CRYPTO"])
+    assert len(bars) == 2
+    # Price precision is 2
+    assert str(bars[0].open) == "68830.14"
+
+
+def test_sync_crypto_bars_uses_crypto_venue(tmp_catalog, tmp_path):
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    parquet_path = str(tmp_path / "ingestion" / "crypto_bars" / "symbol=ETH-USD" / "date=2026-02-16" / "part.parquet")
+    _write_crypto_bars_parquet(parquet_path, [{
+        "open_time": 1_771_218_000_000,
+        "open": 3000.50,
+        "high": 3010.00,
+        "low": 2990.00,
+        "close": 3005.00,
+        "volume": 100.5,
+        "close_time": 1_771_218_060_000,
+        "quote_volume": 301500.0,
+        "symbol": "ETH-USD",
+    }])
+    tmp_catalog.sync_crypto_bars_file(parquet_path)
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    bars = catalog.bars(instrument_ids=["ETH-USD.CRYPTO"])
+    assert len(bars) == 1
+    assert "CRYPTO" in str(bars[0].bar_type)
+
+
+def test_sync_crypto_bars_uses_1_minute_spec(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "crypto_bars" / "symbol=BTC-USD" / "date=2026-02-17" / "part.parquet")
+    _write_crypto_bars_parquet(parquet_path, [{
+        "open_time": 1_771_300_000_000,
+        "open": 70000.0,
+        "high": 70100.0,
+        "low": 69900.0,
+        "close": 70050.0,
+        "volume": 5.0,
+        "close_time": 1_771_300_060_000,
+        "quote_volume": 350250.0,
+        "symbol": "BTC-USD",
+    }])
+    tmp_catalog.sync_crypto_bars_file(parquet_path)
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    bars = catalog.bars(instrument_ids=["BTC-USD.CRYPTO"])
+    assert "MINUTE" in str(bars[0].bar_type)
+
+
+def test_sync_crypto_bars_marks_file_as_synced(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "crypto_bars" / "symbol=BTC-USD" / "date=2026-02-18" / "part.parquet")
+    _write_crypto_bars_parquet(parquet_path, [{
+        "open_time": 1_771_400_000_000,
+        "open": 71000.0,
+        "high": 71100.0,
+        "low": 70900.0,
+        "close": 71050.0,
+        "volume": 3.0,
+        "close_time": 1_771_400_060_000,
+        "quote_volume": 213150.0,
+        "symbol": "BTC-USD",
+    }])
+    tmp_catalog.sync_crypto_bars_file(parquet_path)
+    assert tmp_catalog.is_synced(parquet_path) is True
+    rebuilt = CatalogBuilder(
+        ingestion_data_dir=str(tmp_path / "ingestion"),
+        catalog_path=tmp_catalog._catalog_path,
+    )
+    assert rebuilt.is_synced(parquet_path) is True
