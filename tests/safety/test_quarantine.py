@@ -56,3 +56,21 @@ def test_is_quarantined_returns_true_for_active_ticker(quarantine):
     quarantine.append(OrphanEvent(event_type="POSITION", ticker="KXBTC15M-X", strategy_id=None, detail={}, ts=1000))
     assert quarantine.is_quarantined("KXBTC15M-X")
     assert not quarantine.is_quarantined("KXBTC15M-Y")
+
+
+def test_load_existing_restores_state_on_restart(tmp_path):
+    log_path = str(tmp_path / "quarantine.jsonl")
+    # First instance: write events
+    q1 = QuarantineBook(log_path=log_path)
+    q1.append(OrphanEvent(event_type="ORDER", ticker="KXBTC15M-X", strategy_id=None, detail={"id": "abc"}, ts=1000))
+    q1.append(OrphanEvent(event_type="FILL", ticker="KXBTC15M-Y", strategy_id="stat_arb", detail={"id": "def"}, ts=1001))
+
+    # Second instance: reload from same file
+    q2 = QuarantineBook(log_path=log_path)
+    events = q2.get_all()
+    assert len(events) == 2
+    assert events[0].event_type == "ORDER"
+    assert events[1].ticker == "KXBTC15M-Y"
+    assert q2.is_quarantined("KXBTC15M-X")
+    assert q2.is_quarantined("KXBTC15M-Y")
+    assert not q2.is_quarantined("KXBTC15M-Z")

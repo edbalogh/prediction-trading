@@ -2,9 +2,12 @@ from __future__ import annotations
 
 import dataclasses
 import json
+import logging
 from pathlib import Path
 
 from safety.types import OrphanEvent
+
+_logger = logging.getLogger(__name__)
 
 _DEFAULT_LOG_PATH = "data/quarantine.jsonl"
 
@@ -43,4 +46,4 @@ class QuarantineBook:
                     self._events.append(event)
                     self._quarantined_tickers.add(event.ticker)
                 except Exception:
-                    pass
+                    _logger.warning("skipping corrupt quarantine log line: %r", line)
