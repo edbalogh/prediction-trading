@@ -262,8 +262,8 @@ def main() -> None:
     import argparse
 
     parser = argparse.ArgumentParser(description="Sync Ingestion data to NautilusTrader catalog")
-    parser.add_argument("--ingestion-dir", default="/Users/edbalogh/Trading/Ingestion/data",
-                        help="Path to Ingestion data directory")
+    parser.add_argument("--ingestion-dir", required=True,
+                        help="Path to Ingestion data directory (e.g. /path/to/Trading/Ingestion/data)")
     parser.add_argument("--catalog-path", default="~/.nautilus/catalog",
                         help="Path to NautilusTrader catalog")
     parser.add_argument("--type", choices=["trades", "candlesticks", "crypto_bars", "all"],
@@ -279,8 +279,10 @@ def main() -> None:
         summary = {"trades": builder.sync_trades()}
     elif args.type == "candlesticks":
         summary = {"candlesticks": builder.sync_candlesticks()}
-    else:
+    elif args.type == "crypto_bars":
         summary = {"crypto_bars": builder.sync_crypto_bars()}
+    else:
+        raise ValueError(f"Unexpected --type value: {args.type!r}")
 
     for key, count in summary.items():
         print(f"{key}: {count} records synced")

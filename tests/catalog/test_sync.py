@@ -469,5 +469,5 @@ def test_sync_all_returns_summary(tmp_catalog, tmp_path):
         "series_ticker": "KXBTC15M",
     }])
     summary = tmp_catalog.sync_all()
-    assert "trades" in summary
+    assert set(summary) == {"trades", "candlesticks", "crypto_bars"}
     assert summary["trades"] >= 1
