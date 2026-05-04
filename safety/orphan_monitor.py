@@ -33,13 +33,13 @@ class OrphanMonitor:
     def tick(self) -> dict[str, int]:
         orphan_orders = 0
         orphan_fills = 0
-        cached_open = {o.kalshi_order_id: o for o in self._store.get_open_orders() if o.kalshi_order_id}
+        cached_open_ids = {o.kalshi_order_id for o in self._store.get_open_orders() if o.kalshi_order_id}
 
         live_orders = self._http.list_recent_orders(status="resting")
         for live in live_orders:
             oid = live.get("order_id")
             cid = live.get("client_order_id")
-            if oid and oid not in cached_open:
+            if oid and oid not in cached_open_ids:
                 ticker = live.get("ticker", "")
                 _logger.warning("orphan order detected: kalshi_order_id=%s", oid)
                 orphan_orders += 1
@@ -58,7 +58,7 @@ class OrphanMonitor:
         live_fills = self._http.list_recent_fills()
         for fill in live_fills:
             oid = fill.get("order_id")
-            if oid and oid not in cached_open:
+            if oid and oid not in cached_open_ids and self._store.get_order_by_kalshi_id(oid) is None:
                 ticker = fill.get("ticker", "")
                 _logger.warning("orphan fill: trade_id=%s order_id=%s", fill.get("trade_id"), oid)
                 orphan_fills += 1

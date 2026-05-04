@@ -7,6 +7,7 @@ from safety.types import OrderRecord
 _ORDER_KEY = "nautilus_plus:order:{client_order_id}"
 _OPEN_ORDERS_KEY = "nautilus_plus:open_orders"
 _STRATEGY_ORDERS_KEY = "nautilus_plus:strategy_orders:{strategy_id}"
+_KALSHI_ID_INDEX = "nautilus_plus:kalshi_id:{kalshi_order_id}"
 
 
 class StateStore:
@@ -16,6 +17,8 @@ class StateStore:
     def save_order(self, record: OrderRecord) -> None:
         key = _ORDER_KEY.format(client_order_id=record.client_order_id)
         self._r.hset(key, mapping=self._record_to_dict(record))
+        if record.kalshi_order_id:
+            self._r.set(_KALSHI_ID_INDEX.format(kalshi_order_id=record.kalshi_order_id), record.client_order_id)
         if record.is_open:
             self._r.sadd(_OPEN_ORDERS_KEY, record.client_order_id)
             self._r.sadd(_STRATEGY_ORDERS_KEY.format(strategy_id=record.strategy_id), record.client_order_id)
@@ -37,6 +40,12 @@ class StateStore:
             if record and record.is_open:
                 records.append(record)
         return records
+
+    def get_order_by_kalshi_id(self, kalshi_order_id: str) -> OrderRecord | None:
+        client_order_id = self._r.get(_KALSHI_ID_INDEX.format(kalshi_order_id=kalshi_order_id))
+        if not client_order_id:
+            return None
+        return self.get_order(client_order_id)
 
     def get_orders_by_strategy(self, strategy_id: str) -> list[OrderRecord]:
         ids = self._r.smembers(_STRATEGY_ORDERS_KEY.format(strategy_id=strategy_id))

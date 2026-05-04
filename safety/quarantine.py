@@ -3,6 +3,7 @@ from __future__ import annotations
 import dataclasses
 import json
 import logging
+import threading
 from pathlib import Path
 
 from safety.types import OrphanEvent
@@ -18,13 +19,15 @@ class QuarantineBook:
         self._path.parent.mkdir(parents=True, exist_ok=True)
         self._quarantined_tickers: set[str] = set()
         self._events: list[OrphanEvent] = []
+        self._lock = threading.Lock()
         self._load_existing()
 
     def append(self, event: OrphanEvent) -> None:
-        self._events.append(event)
-        self._quarantined_tickers.add(event.ticker)
-        with self._path.open("a") as f:
-            f.write(json.dumps(dataclasses.asdict(event)) + "\n")
+        with self._lock:
+            self._events.append(event)
+            self._quarantined_tickers.add(event.ticker)
+            with self._path.open("a") as f:
+                f.write(json.dumps(dataclasses.asdict(event)) + "\n")
 
     def get_all(self) -> list[OrphanEvent]:
         return list(self._events)

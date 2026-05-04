@@ -5,6 +5,8 @@ import threading
 import time
 from typing import Any
 
+from safety.state_store import StateStore
+
 _logger = logging.getLogger(__name__)
 
 
@@ -13,10 +15,12 @@ class DeadMansSwitch:
         self,
         *,
         http: Any,
+        store: StateStore,
         timeout_secs: float = 300.0,
         poll_interval_secs: float = 10.0,
     ) -> None:
         self._http = http
+        self._store = store
         self._timeout = timeout_secs
         self._poll_interval = poll_interval_secs
         self._strategies: dict[str, float] = {}
@@ -54,15 +58,14 @@ class DeadMansSwitch:
         with self._lock:
             expired = [sid for sid, last in self._strategies.items() if now - last > self._timeout]
         for strategy_id in expired:
-            _logger.error("DeadMansSwitch triggered for strategy=%s — cancelling all open orders", strategy_id)
-            open_orders = self._http.list_recent_orders(status="resting")
-            for order in open_orders:
-                oid = order.get("order_id")
-                if oid:
+            _logger.error("DeadMansSwitch triggered for strategy=%s — cancelling open orders", strategy_id)
+            strategy_orders = self._store.get_orders_by_strategy(strategy_id)
+            for order in strategy_orders:
+                if order.kalshi_order_id:
                     try:
-                        self._http.cancel_order(oid)
-                        _logger.info("dead mans switch cancelled order=%s", oid)
+                        self._http.cancel_order(order.kalshi_order_id)
+                        _logger.info("dead mans switch cancelled order=%s", order.kalshi_order_id)
                     except Exception:
-                        _logger.exception("failed to cancel order=%s", oid)
+                        _logger.exception("failed to cancel order=%s", order.kalshi_order_id)
             with self._lock:
                 self._strategies.pop(strategy_id, None)

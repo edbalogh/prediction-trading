@@ -23,6 +23,12 @@ from nautilus_trader.model.objects import Currency, Money, Price, Quantity
 
 from adapters.kalshi.constants import KALSHI_VENUE, PRICE_PRECISION, SIZE_PRECISION
 from adapters.kalshi.factories import kalshi_ticker_to_instrument_id
+from safety.alerts import AlertDispatcher
+from safety.position_limits import PositionLimitChecker
+from safety.quarantine import QuarantineBook
+from safety.reconciliation import ReconciliationGate
+from safety.state_store import StateStore
+from safety.types import OrderRecord
 
 _logger = logging.getLogger(__name__)
 
@@ -111,6 +117,9 @@ class KalshiExecutionClient(LiveExecutionClient):
         *,
         http_client,
         config,
+        state_store: StateStore | None = None,
+        reconciliation_gate: ReconciliationGate | None = None,
+        position_limit_checker: PositionLimitChecker | None = None,
         **kwargs,
     ) -> None:
         super().__init__(
@@ -123,9 +132,20 @@ class KalshiExecutionClient(LiveExecutionClient):
         )
         self._http = http_client
         self._config = config
+        self._state_store = state_store
+        self._reconciliation_gate = reconciliation_gate
+        self._position_limit_checker = position_limit_checker
 
     async def _connect(self) -> None:
         _logger.info("KalshiExecutionClient connecting")
+        if self._reconciliation_gate is not None:
+            result = self._reconciliation_gate.run()
+            if not result.is_clean:
+                _logger.error(
+                    "reconciliation gate failed: %d unresolvable, %d orphan orders — strategies paused",
+                    len(result.unresolvable),
+                    len(result.orphan_orders),
+                )
 
     async def _disconnect(self) -> None:
         _logger.info("KalshiExecutionClient disconnecting")
@@ -180,6 +200,24 @@ class KalshiExecutionClient(LiveExecutionClient):
     async def _submit_order(self, command) -> None:
         order = command.order
         ticker = order.instrument_id.symbol.value
+
+        if self._position_limit_checker is not None:
+            current_pos = 0  # TODO: query from cache when portfolio tracking is wired
+            if not self._position_limit_checker.check(
+                ticker=ticker,
+                strategy_id=str(command.strategy_id),
+                current_position=current_pos,
+                order_quantity=int(order.quantity.as_double()),
+            ):
+                self.generate_order_rejected(
+                    strategy_id=command.strategy_id,
+                    instrument_id=order.instrument_id,
+                    client_order_id=order.client_order_id,
+                    reason=self._position_limit_checker.last_violation_reason or "position limit exceeded",
+                    ts_event=time.time_ns(),
+                )
+                return
+
         payload = kalshi_order_payload(
             ticker=ticker,
             side=order.side,
@@ -189,11 +227,26 @@ class KalshiExecutionClient(LiveExecutionClient):
         )
         try:
             result = self._http.place_order(payload)
+            kalshi_order_id = result["kalshi_order_id"]
+
+            if self._state_store is not None:
+                self._state_store.save_order(OrderRecord(
+                    client_order_id=str(order.client_order_id),
+                    kalshi_order_id=kalshi_order_id,
+                    ticker=ticker,
+                    strategy_id=str(command.strategy_id),
+                    side="yes" if order.side == OrderSide.BUY else "no",
+                    price_cents=round(order.price.as_double() * 100),
+                    quantity=int(order.quantity.as_double()),
+                    filled=0,
+                    status="open",
+                ))
+
             self.generate_order_accepted(
                 strategy_id=command.strategy_id,
                 instrument_id=order.instrument_id,
                 client_order_id=order.client_order_id,
-                venue_order_id=VenueOrderId(result["kalshi_order_id"]),
+                venue_order_id=VenueOrderId(kalshi_order_id),
                 ts_event=time.time_ns(),
             )
         except Exception as e:
@@ -212,6 +265,8 @@ class KalshiExecutionClient(LiveExecutionClient):
             return
         try:
             self._http.cancel_order(str(venue_order_id))
+            if self._state_store is not None:
+                self._state_store.mark_order_canceled(str(command.client_order_id))
             self.generate_order_canceled(
                 strategy_id=command.strategy_id,
                 instrument_id=command.instrument_id,
