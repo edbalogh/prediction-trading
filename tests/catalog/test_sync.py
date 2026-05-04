@@ -260,3 +260,24 @@ def test_sync_candlesticks_bar_type_uses_hour_for_60min(tmp_catalog, tmp_path):
     assert len(bars) == 1
     # Bar type string should contain "HOUR" not "MINUTE"
     assert "HOUR" in str(bars[0].bar_type)
+
+
+def test_sync_candlesticks_marks_file_as_synced(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "candlesticks" / "interval=60m" / "series=KXBTC15M" / "date=2026-03-28" / "part.parquet")
+    _write_candlesticks_parquet(parquet_path, [{
+        "end_period_ts": 1_774_288_800,
+        "ticker": "KXBTC15M-SYNCTEST",
+        "interval_minutes": 60,
+        "price_open": "0.50",
+        "price_high": "0.55",
+        "price_low": "0.48",
+        "price_close": "0.52",
+        "volume": "10.00",
+    }])
+    tmp_catalog.sync_candlesticks_file(parquet_path)
+    assert tmp_catalog.is_synced(parquet_path) is True
+    rebuilt = CatalogBuilder(
+        ingestion_data_dir=str(tmp_path / "ingestion"),
+        catalog_path=tmp_catalog._catalog_path,
+    )
+    assert rebuilt.is_synced(parquet_path) is True
