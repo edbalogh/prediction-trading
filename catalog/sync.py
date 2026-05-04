@@ -53,3 +53,68 @@ def taker_side_to_aggressor(side: str) -> AggressorSide:
     if side == "no":
         return AggressorSide.SELLER
     raise ValueError(f"Unknown taker_side value: {side!r}. Expected 'yes' or 'no'.")
+
+
+class CatalogBuilder:
+    def __init__(
+        self,
+        *,
+        ingestion_data_dir: str,
+        catalog_path: str = "~/.nautilus/catalog",
+    ) -> None:
+        self._ingestion_dir = Path(ingestion_data_dir)
+        self._catalog_path = str(Path(catalog_path).expanduser())
+        self._state_path = Path(self._catalog_path) / ".catalog_sync_state.json"
+        self._catalog = ParquetDataCatalog(self._catalog_path)
+        self._synced_files: set[str] = set()
+        self._load_state()
+
+    # ── State management ──────────────────────────────────────────────────────
+
+    def _load_state(self) -> None:
+        if self._state_path.exists():
+            data = json.loads(self._state_path.read_text())
+            self._synced_files = set(data.get("synced_files", []))
+
+    def _save_state(self) -> None:
+        self._state_path.parent.mkdir(parents=True, exist_ok=True)
+        self._state_path.write_text(json.dumps({"synced_files": sorted(self._synced_files)}, indent=2))
+
+    def _relative(self, path: str) -> str:
+        return str(Path(path).relative_to(self._ingestion_dir))
+
+    def is_synced(self, path: str) -> bool:
+        return self._relative(path) in self._synced_files
+
+    def _mark_synced(self, path: str) -> None:
+        self._synced_files.add(self._relative(path))
+        self._save_state()
+
+    # ── Trades → TradeTick ────────────────────────────────────────────────────
+
+    def sync_trades_file(self, parquet_path: str) -> int:
+        df = pd.read_parquet(parquet_path)
+        ticks: list[TradeTick] = []
+        for _, row in df.iterrows():
+            yes_price_raw = row.get("yes_price_dollars")
+            if yes_price_raw is None or (isinstance(yes_price_raw, float) and pd.isna(yes_price_raw)):
+                continue
+            try:
+                price_val = float(yes_price_raw)
+            except (ValueError, TypeError):
+                continue
+            instrument_id = InstrumentId(Symbol(str(row["ticker"])), KALSHI_VENUE)
+            ticks.append(TradeTick(
+                instrument_id=instrument_id,
+                price=Price(round(price_val, 2), 2),
+                size=Quantity(int(float(str(row["count_fp"]))), 0),
+                aggressor_side=taker_side_to_aggressor(str(row.get("taker_side", "yes"))),
+                trade_id=TradeId(str(row["trade_id"])),
+                ts_event=parse_ts_ns(str(row["created_time"])),
+                ts_init=parse_ts_ns(str(row["created_time"])),
+            ))
+        if ticks:
+            ticks.sort(key=lambda t: t.ts_event)
+            self._catalog.write_data(ticks)
+        _logger.info("sync_trades_file: wrote %d ticks from %s", len(ticks), parquet_path)
+        return len(ticks)
