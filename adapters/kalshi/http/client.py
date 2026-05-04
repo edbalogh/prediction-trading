@@ -16,6 +16,10 @@ class KalshiHttpClient:
         self._base_url = base_url.rstrip("/")
         self._api_key = api_key
         self._key: RSAPrivateKey | None = load_private_key(private_key_pem) if private_key_pem else None
+        self._session = httpx.Client(timeout=10)
+
+    def close(self) -> None:
+        self._session.close()
 
     # ── Instruments ──────────────────────────────────────────────────────────
 
@@ -66,8 +70,11 @@ class KalshiHttpClient:
         data = self._request("DELETE", f"/portfolio/orders/{kalshi_order_id}")
         return data.get("order", data)
 
-    def list_recent_orders(self, limit: int = 100) -> list[dict[str, Any]]:
-        data = self._request("GET", "/portfolio/orders", params={"limit": limit, "status": "resting"})
+    def list_recent_orders(self, limit: int = 100, status: str | None = "resting") -> list[dict[str, Any]]:
+        params: dict[str, Any] = {"limit": limit}
+        if status:
+            params["status"] = status
+        data = self._request("GET", "/portfolio/orders", params=params)
         return data.get("orders", [])
 
     def list_recent_fills(self, limit: int = 100) -> list[dict[str, Any]]:
@@ -97,6 +104,8 @@ class KalshiHttpClient:
         return base.replace("https://", "wss://") + "/trade-api/ws/v2"
 
     def websocket_headers(self) -> dict[str, str]:
+        if self._key is None:
+            raise RuntimeError("websocket_headers() requires a private key (private_key_pem was empty)")
         path = "/trade-api/ws/v2"
         ts_ms = str(int(time.time() * 1000))
         return {
@@ -126,8 +135,7 @@ class KalshiHttpClient:
         url = self._base_url + api_path
         headers = self._sign_headers(method, api_path) if self._key else {}
         for attempt in range(retries):
-            with httpx.Client(timeout=10) as client:
-                response = client.request(method, url, json=json, params=params, headers=headers)
+            response = self._session.request(method, url, json=json, params=params, headers=headers)
             if response.status_code not in _RETRYABLE or attempt == retries - 1:
                 response.raise_for_status()
                 return response.json()

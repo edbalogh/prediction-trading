@@ -105,7 +105,14 @@ def fill_to_trade_tick(
     instrument_id: InstrumentId,
     ts_init: int,
 ) -> TradeTick:
-    price_cents = fill.get("yes_price") or (100 - fill.get("no_price", 0))
+    yes_price_val = fill.get("yes_price")
+    no_price_val = fill.get("no_price")
+    if yes_price_val is not None:
+        price_cents = yes_price_val
+    elif no_price_val is not None:
+        price_cents = 100 - no_price_val
+    else:
+        raise ValueError(f"fill {fill.get('trade_id')} has neither yes_price nor no_price")
     price = round(price_cents / 100, PRICE_PRECISION)
     size = fill["count"]
     is_taker = fill.get("is_taker", True)
