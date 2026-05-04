@@ -150,6 +150,9 @@ class CatalogBuilder:
             instrument_id = InstrumentId(Symbol(str(row["ticker"])), KALSHI_VENUE)
             bar_type = BarType(instrument_id, spec)
             ts_event = parse_ts_ns(int(row["end_period_ts"]))
+            # Clamp to enforce OHLC invariants (float imprecision can violate them)
+            low_val  = min(open_val, high_val, low_val, close_val)
+            high_val = max(open_val, high_val, low_val, close_val)
             bars.append(Bar(
                 bar_type=bar_type,
                 open=Price(round(open_val, 2), 2),
