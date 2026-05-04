@@ -386,3 +386,27 @@ def test_sync_crypto_bars_marks_file_as_synced(tmp_catalog, tmp_path):
         catalog_path=tmp_catalog._catalog_path,
     )
     assert rebuilt.is_synced(parquet_path) is True
+
+
+def test_sync_crypto_bars_clamps_ohlc_invariants(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "crypto_bars" / "symbol=BTC-USD" / "date=2026-02-19" / "part.parquet")
+    # This bar has low > open which violates the OHLC invariant
+    _write_crypto_bars_parquet(parquet_path, [{
+        "open_time": 1_771_500_000_000,
+        "open": 68800.00,
+        "high": 68900.00,
+        "low": 68850.00,   # low > open — violates invariant
+        "close": 68870.00,
+        "volume": 1.5,
+        "close_time": 1_771_500_060_000,
+        "quote_volume": 103305.0,
+        "symbol": "BTC-USD",
+    }])
+    # Should not raise — clamping should handle this
+    count = tmp_catalog.sync_crypto_bars_file(parquet_path)
+    assert count == 1
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    bars = catalog.bars(instrument_ids=["BTC-USD.CRYPTO"])
+    # After clamping: low should be <= open
+    assert float(str(bars[-1].low)) <= float(str(bars[-1].open))

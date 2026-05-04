@@ -188,14 +188,14 @@ class CatalogBuilder:
             high_clamped = round(max(open_val, high_val, low_val, close_val), 2)
             instrument_id = InstrumentId(Symbol(str(row["symbol"])), CRYPTO_VENUE)
             bar_type = BarType(instrument_id, spec)
-            ts_event = parse_ts_ns(int(row["open_time"]), unit="ms")
+            ts_event = parse_ts_ns(int(row["close_time"]), unit="ms")
             bars.append(Bar(
                 bar_type=bar_type,
                 open=Price(round(open_val, 2), 2),
                 high=Price(high_clamped, 2),
                 low=Price(low_clamped, 2),
                 close=Price(round(close_val, 2), 2),
-                volume=Quantity(int(vol_val * 1000), 3),
+                volume=Quantity(round(vol_val * 1000), 3),
                 ts_event=ts_event,
                 ts_init=ts_event,
             ))
