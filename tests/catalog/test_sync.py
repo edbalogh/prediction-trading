@@ -181,3 +181,82 @@ def test_sync_marks_file_as_synced(tmp_catalog, tmp_path):
         catalog_path=tmp_catalog._catalog_path,
     )
     assert rebuilt.is_synced(parquet_path) is True
+
+
+def _write_candlesticks_parquet(path: str, rows: list[dict]) -> None:
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    pd.DataFrame(rows).to_parquet(path, index=False)
+
+
+def test_sync_candlesticks_file_writes_bars(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "candlesticks" / "interval=60m" / "series=KXBTC15M" / "date=2026-03-25" / "part.parquet")
+    _write_candlesticks_parquet(parquet_path, [
+        {
+            "end_period_ts": 1_774_274_400,   # Unix seconds
+            "ticker": "KXBTC15M-TEST",
+            "interval_minutes": 60,
+            "price_open": "0.50",
+            "price_high": "0.60",
+            "price_low": "0.48",
+            "price_close": "0.55",
+            "volume": "100.00",
+        },
+    ])
+    count = tmp_catalog.sync_candlesticks_file(parquet_path)
+    assert count == 1
+
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    bars = catalog.bars(instrument_ids=["KXBTC15M-TEST.KALSHI"])
+    assert len(bars) == 1
+    assert str(bars[0].open) == "0.50"
+    assert str(bars[0].close) == "0.55"
+
+
+def test_sync_candlesticks_file_skips_null_ohlc(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "candlesticks" / "interval=60m" / "series=KXBTC15M" / "date=2026-03-26" / "part.parquet")
+    _write_candlesticks_parquet(parquet_path, [
+        {   # Null OHLC — should be skipped
+            "end_period_ts": 1_774_278_000,
+            "ticker": "KXBTC15M-TEST",
+            "interval_minutes": 60,
+            "price_open": None,
+            "price_high": None,
+            "price_low": None,
+            "price_close": None,
+            "volume": "0.00",
+        },
+        {   # Valid — should be written
+            "end_period_ts": 1_774_281_600,
+            "ticker": "KXBTC15M-TEST",
+            "interval_minutes": 60,
+            "price_open": "0.53",
+            "price_high": "0.58",
+            "price_low": "0.51",
+            "price_close": "0.56",
+            "volume": "50.00",
+        },
+    ])
+    count = tmp_catalog.sync_candlesticks_file(parquet_path)
+    assert count == 1
+
+
+def test_sync_candlesticks_bar_type_uses_hour_for_60min(tmp_catalog, tmp_path):
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    parquet_path = str(tmp_path / "ingestion" / "candlesticks" / "interval=60m" / "series=KXBTC15M" / "date=2026-03-27" / "part.parquet")
+    _write_candlesticks_parquet(parquet_path, [{
+        "end_period_ts": 1_774_285_200,
+        "ticker": "KXBTC15M-HOURTEST",
+        "interval_minutes": 60,
+        "price_open": "0.40",
+        "price_high": "0.45",
+        "price_low": "0.38",
+        "price_close": "0.42",
+        "volume": "20.00",
+    }])
+    tmp_catalog.sync_candlesticks_file(parquet_path)
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    bars = catalog.bars(instrument_ids=["KXBTC15M-HOURTEST.KALSHI"])
+    assert len(bars) == 1
+    # Bar type string should contain "HOUR" not "MINUTE"
+    assert "HOUR" in str(bars[0].bar_type)

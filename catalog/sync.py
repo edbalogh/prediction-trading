@@ -124,3 +124,45 @@ class CatalogBuilder:
         _logger.info("sync_trades_file: wrote %d ticks from %s", len(ticks), parquet_path)
         self._mark_synced(parquet_path)
         return len(ticks)
+
+    # ── Candlesticks → Bar ────────────────────────────────────────────────────
+
+    def sync_candlesticks_file(self, parquet_path: str) -> int:
+        df = pd.read_parquet(parquet_path)
+        bars: list[Bar] = []
+        for _, row in df.iterrows():
+            open_raw = row.get("price_open")
+            high_raw = row.get("price_high")
+            low_raw  = row.get("price_low")
+            close_raw = row.get("price_close")
+            if any(v is None or (isinstance(v, float) and pd.isna(v)) for v in [open_raw, high_raw, low_raw, close_raw]):
+                continue
+            try:
+                open_val  = float(str(open_raw))
+                high_val  = float(str(high_raw))
+                low_val   = float(str(low_raw))
+                close_val = float(str(close_raw))
+                vol_val   = float(str(row.get("volume") or "0"))
+            except (ValueError, TypeError):
+                continue
+            interval_minutes = int(row["interval_minutes"])
+            spec = interval_minutes_to_bar_spec(interval_minutes)
+            instrument_id = InstrumentId(Symbol(str(row["ticker"])), KALSHI_VENUE)
+            bar_type = BarType(instrument_id, spec)
+            ts_event = parse_ts_ns(int(row["end_period_ts"]))
+            bars.append(Bar(
+                bar_type=bar_type,
+                open=Price(round(open_val, 2), 2),
+                high=Price(round(high_val, 2), 2),
+                low=Price(round(low_val, 2), 2),
+                close=Price(round(close_val, 2), 2),
+                volume=Quantity(int(vol_val), 0),
+                ts_event=ts_event,
+                ts_init=ts_event,
+            ))
+        if bars:
+            bars.sort(key=lambda b: b.ts_event)
+            self._catalog.write_data(bars)
+        _logger.info("sync_candlesticks_file: wrote %d bars from %s", len(bars), parquet_path)
+        self._mark_synced(parquet_path)
+        return len(bars)
