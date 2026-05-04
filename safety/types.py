@@ -50,7 +50,7 @@ class OrphanEvent:
     ticker: str
     strategy_id: str | None
     detail: dict[str, Any]
-    ts: int = field(default_factory=lambda: int(time.time()))
+    ts: int = field(default_factory=time.time_ns)
 
 
 @dataclass
@@ -58,4 +58,4 @@ class AlertEvent:
     level: str             # "INFO", "WARNING", "CRITICAL"
     message: str
     context: dict[str, Any] = field(default_factory=dict)
-    ts: int = field(default_factory=lambda: int(time.time()))
+    ts: int = field(default_factory=time.time_ns)
