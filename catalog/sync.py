@@ -205,3 +205,86 @@ class CatalogBuilder:
         _logger.info("sync_crypto_bars_file: wrote %d bars from %s", len(bars), parquet_path)
         self._mark_synced(parquet_path)
         return len(bars)
+
+    # ── Orchestration ─────────────────────────────────────────────────────────
+
+    def sync_trades(self, series: str | None = None) -> int:
+        """Sync all unseen trade parquet files. Returns total records written."""
+        pattern = "trades"
+        if series:
+            pattern = f"trades/series={series}"
+        return self._sync_files(
+            pattern=pattern,
+            sync_fn=self.sync_trades_file,
+        )
+
+    def sync_candlesticks(self, series: str | None = None) -> int:
+        pattern = "candlesticks"
+        if series:
+            pattern = f"candlesticks/*/series={series}"
+        return self._sync_files(
+            pattern=pattern,
+            sync_fn=self.sync_candlesticks_file,
+        )
+
+    def sync_crypto_bars(self, symbol: str | None = None) -> int:
+        pattern = "crypto_bars"
+        if symbol:
+            pattern = f"crypto_bars/symbol={symbol}"
+        return self._sync_files(
+            pattern=pattern,
+            sync_fn=self.sync_crypto_bars_file,
+        )
+
+    def sync_all(self) -> dict[str, int]:
+        return {
+            "trades":       self.sync_trades(),
+            "candlesticks": self.sync_candlesticks(),
+            "crypto_bars":  self.sync_crypto_bars(),
+        }
+
+    def _sync_files(self, *, pattern: str, sync_fn) -> int:
+        total = 0
+        for parquet_file in sorted(self._ingestion_dir.glob(f"{pattern}/**/part.parquet")):
+            path_str = str(parquet_file)
+            if self.is_synced(path_str):
+                _logger.debug("skipping already-synced: %s", path_str)
+                continue
+            try:
+                count = sync_fn(path_str)
+                total += count
+            except Exception:
+                _logger.exception("failed to sync %s", path_str)
+        return total
+
+
+def main() -> None:
+    import argparse
+
+    parser = argparse.ArgumentParser(description="Sync Ingestion data to NautilusTrader catalog")
+    parser.add_argument("--ingestion-dir", default="/Users/edbalogh/Trading/Ingestion/data",
+                        help="Path to Ingestion data directory")
+    parser.add_argument("--catalog-path", default="~/.nautilus/catalog",
+                        help="Path to NautilusTrader catalog")
+    parser.add_argument("--type", choices=["trades", "candlesticks", "crypto_bars", "all"],
+                        default="all", help="Which data type to sync")
+    args = parser.parse_args()
+
+    logging.basicConfig(level=logging.INFO, format="%(asctime)s %(name)s %(levelname)s %(message)s")
+    builder = CatalogBuilder(ingestion_data_dir=args.ingestion_dir, catalog_path=args.catalog_path)
+
+    if args.type == "all":
+        summary = builder.sync_all()
+    elif args.type == "trades":
+        summary = {"trades": builder.sync_trades()}
+    elif args.type == "candlesticks":
+        summary = {"candlesticks": builder.sync_candlesticks()}
+    else:
+        summary = {"crypto_bars": builder.sync_crypto_bars()}
+
+    for key, count in summary.items():
+        print(f"{key}: {count} records synced")
+
+
+if __name__ == "__main__":
+    main()

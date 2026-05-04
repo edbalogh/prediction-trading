@@ -410,3 +410,64 @@ def test_sync_crypto_bars_clamps_ohlc_invariants(tmp_catalog, tmp_path):
     bars = catalog.bars(instrument_ids=["BTC-USD.CRYPTO"])
     # After clamping: low should be <= open
     assert float(str(bars[-1].low)) <= float(str(bars[-1].open))
+
+
+def test_sync_trades_discovers_and_syncs_all_files(tmp_catalog, tmp_path):
+    ingestion_dir = str(tmp_path / "ingestion")
+    for series, date in [("KXBTC15M", "2026-03-25"), ("KXBTC15M", "2026-03-26")]:
+        path = os.path.join(ingestion_dir, "trades", f"series={series}", f"date={date}", "part.parquet")
+        _write_trades_parquet(path, [{
+            "trade_id": f"t-{date}",
+            "ticker": f"{series}-TEST",
+            "count_fp": "1.00",
+            "yes_price_dollars": "0.50",
+            "no_price_dollars": "0.50",
+            "taker_side": "yes",
+            "created_time": f"{date}T10:00:00.000000Z",
+            "series_ticker": series,
+        }])
+    total = tmp_catalog.sync_trades()
+    assert total == 2
+
+
+def test_idempotency_does_not_double_write(tmp_catalog, tmp_path):
+    from nautilus_trader.persistence.catalog import ParquetDataCatalog
+    ingestion_dir = str(tmp_path / "ingestion")
+    path = os.path.join(ingestion_dir, "trades", "series=KXBTC15M", "date=2026-03-28", "part.parquet")
+    _write_trades_parquet(path, [{
+        "trade_id": "t-idempotent",
+        "ticker": "KXBTC15M-IDEM",
+        "count_fp": "1.00",
+        "yes_price_dollars": "0.50",
+        "no_price_dollars": "0.50",
+        "taker_side": "yes",
+        "created_time": "2026-03-28T10:00:00.000000Z",
+        "series_ticker": "KXBTC15M",
+    }])
+    # First sync
+    tmp_catalog.sync_trades()
+    # Second sync — file already marked as synced, should skip
+    count = tmp_catalog.sync_trades()
+    assert count == 0
+
+    catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
+    ticks = catalog.trade_ticks(instrument_ids=["KXBTC15M-IDEM.KALSHI"])
+    assert len(ticks) == 1   # Not duplicated
+
+
+def test_sync_all_returns_summary(tmp_catalog, tmp_path):
+    ingestion_dir = str(tmp_path / "ingestion")
+    path = os.path.join(ingestion_dir, "trades", "series=KXBTC15M", "date=2026-03-29", "part.parquet")
+    _write_trades_parquet(path, [{
+        "trade_id": "t-all",
+        "ticker": "KXBTC15M-ALL",
+        "count_fp": "1.00",
+        "yes_price_dollars": "0.50",
+        "no_price_dollars": "0.50",
+        "taker_side": "yes",
+        "created_time": "2026-03-29T10:00:00.000000Z",
+        "series_ticker": "KXBTC15M",
+    }])
+    summary = tmp_catalog.sync_all()
+    assert "trades" in summary
+    assert summary["trades"] >= 1
