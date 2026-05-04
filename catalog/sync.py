@@ -103,12 +103,18 @@ class CatalogBuilder:
                 price_val = float(yes_price_raw)
             except (ValueError, TypeError):
                 continue
+            taker_raw = row.get("taker_side")
+            if taker_raw is None or (isinstance(taker_raw, float) and pd.isna(taker_raw)):
+                taker_raw = "yes"
+            count_raw = row.get("count_fp")
+            if count_raw is None or (isinstance(count_raw, float) and pd.isna(count_raw)):
+                continue
             instrument_id = InstrumentId(Symbol(str(row["ticker"])), KALSHI_VENUE)
             ticks.append(TradeTick(
                 instrument_id=instrument_id,
                 price=Price(round(price_val, 2), 2),
-                size=Quantity(int(float(str(row["count_fp"]))), 0),
-                aggressor_side=taker_side_to_aggressor(str(row.get("taker_side", "yes"))),
+                size=Quantity(int(float(str(count_raw))), 0),
+                aggressor_side=taker_side_to_aggressor(str(taker_raw)),
                 trade_id=TradeId(str(row["trade_id"])),
                 ts_event=parse_ts_ns(str(row["created_time"])),
                 ts_init=parse_ts_ns(str(row["created_time"])),
@@ -117,4 +123,5 @@ class CatalogBuilder:
             ticks.sort(key=lambda t: t.ts_event)
             self._catalog.write_data(ticks)
         _logger.info("sync_trades_file: wrote %d ticks from %s", len(ticks), parquet_path)
+        self._mark_synced(parquet_path)
         return len(ticks)

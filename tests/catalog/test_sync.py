@@ -59,7 +59,6 @@ def test_taker_side_to_aggressor_invalid():
         taker_side_to_aggressor("invalid")
 
 
-import tempfile
 import os
 import pandas as pd
 from catalog.sync import CatalogBuilder
@@ -160,3 +159,25 @@ def test_sync_trades_no_is_seller(tmp_catalog, tmp_path):
     catalog = ParquetDataCatalog(tmp_catalog._catalog_path)
     ticks = catalog.trade_ticks(instrument_ids=["KXBTC15M-TEST.KALSHI"])
     assert ticks[0].aggressor_side == AggressorSide.SELLER
+
+
+def test_sync_marks_file_as_synced(tmp_catalog, tmp_path):
+    parquet_path = str(tmp_path / "ingestion" / "trades" / "series=KXBTC15M" / "date=2026-03-30" / "part.parquet")
+    _write_trades_parquet(parquet_path, [{
+        "trade_id": "t-state",
+        "ticker": "KXBTC15M-STATE",
+        "count_fp": "1.00",
+        "yes_price_dollars": "0.50",
+        "no_price_dollars": "0.50",
+        "taker_side": "yes",
+        "created_time": "2026-03-30T10:00:00.000000Z",
+        "series_ticker": "KXBTC15M",
+    }])
+    tmp_catalog.sync_trades_file(parquet_path)
+    assert tmp_catalog.is_synced(parquet_path) is True
+    # Verify state survives reconstruction
+    rebuilt = CatalogBuilder(
+        ingestion_data_dir=str(tmp_path / "ingestion"),
+        catalog_path=tmp_catalog._catalog_path,
+    )
+    assert rebuilt.is_synced(parquet_path) is True
