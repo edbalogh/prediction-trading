@@ -2,12 +2,11 @@ from __future__ import annotations
 
 import json
 import logging
-import os
 from datetime import datetime, timezone
 from pathlib import Path
 
 import pandas as pd
-from nautilus_trader.model.data import Bar, BarSpecification, BarType, TradeTick
+from nautilus_trader.model.data import Bar, BarSpecification, BarType, TradeTick  # Bar/BarType used in Tasks 3-4
 from nautilus_trader.model.enums import AggressorSide, BarAggregation, PriceType
 from nautilus_trader.model.identifiers import InstrumentId, Symbol, TradeId, Venue
 from nautilus_trader.model.objects import Price, Quantity
