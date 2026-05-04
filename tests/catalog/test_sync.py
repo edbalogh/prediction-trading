@@ -10,9 +10,8 @@ from nautilus_trader.model.enums import BarAggregation, PriceType, AggressorSide
 
 def test_parse_ts_ns_iso8601():
     ts = parse_ts_ns("2026-03-25T23:47:43.556733Z")
-    assert ts > 0
-    # 2026-03-25 is after 2026-01-01 (unix ns > 1.77e18)
-    assert ts > 1_770_000_000_000_000_000
+    # Microseconds preserved, sub-microsecond zeroed
+    assert ts == 1_774_482_463_556_733_000
 
 
 def test_parse_ts_ns_unix_seconds():
@@ -48,3 +47,13 @@ def test_taker_side_yes_is_buyer():
 
 def test_taker_side_no_is_seller():
     assert taker_side_to_aggressor("no") == AggressorSide.SELLER
+
+
+def test_interval_minutes_to_bar_spec_invalid():
+    with pytest.raises(ValueError, match="Unsupported interval_minutes=7"):
+        interval_minutes_to_bar_spec(7)
+
+
+def test_taker_side_to_aggressor_invalid():
+    with pytest.raises(ValueError, match="Unknown taker_side"):
+        taker_side_to_aggressor("invalid")
