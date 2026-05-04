@@ -28,7 +28,7 @@ class OrderRecord:
 
 @dataclass
 class ReconciliationResult:
-    resolved_fills: list[dict[str, Any]]
+    resolved_fills: list[str]              # client_order_ids
     resolved_cancels: list[str]           # client_order_ids
     orphan_orders: list[str]              # kalshi_order_ids with no local record
     orphan_fills: list[dict[str, Any]]
