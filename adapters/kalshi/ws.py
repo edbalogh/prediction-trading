@@ -112,5 +112,7 @@ class KalshiWsConnection:
                 await self._replay_subscriptions()
                 delay = self._reconnect_delay
                 _logger.info("WebSocket reconnected")
+            except asyncio.CancelledError:
+                raise
             except Exception:
-                _logger.warning("Reconnect attempt failed, will retry in %.1fs", delay)
+                _logger.warning("Reconnect failed, next attempt in %.1fs", delay)
