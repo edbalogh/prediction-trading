@@ -124,3 +124,46 @@ async def test_on_trade_callback_fires():
 
     assert len(received) == 1
     assert received[0] == trade_payload
+
+
+async def test_unsubscribe_sends_correct_command():
+    received: list[dict] = []
+
+    async def handler(ws):
+        async for msg in ws:
+            received.append(json.loads(msg))
+
+    async with websockets.serve(handler, "localhost", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        conn = KalshiWsConnection(http_client=make_http_client(port))
+        await conn.connect()
+        await conn.subscribe(["KXBTC15M-X"], ["orderbook_delta"])
+        await conn.unsubscribe(["KXBTC15M-X"], ["orderbook_delta"])
+        await asyncio.sleep(0.05)
+        await conn.disconnect()
+
+    assert len(received) == 2
+    assert received[1]["cmd"] == "unsubscribe"
+    assert "KXBTC15M-X" in received[1]["params"]["market_tickers"]
+    assert "orderbook_delta" in received[1]["params"]["channels"]
+
+
+async def test_subscribe_before_connect_replays_on_connect():
+    received: list[dict] = []
+
+    async def handler(ws):
+        async for msg in ws:
+            received.append(json.loads(msg))
+
+    async with websockets.serve(handler, "localhost", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        conn = KalshiWsConnection(http_client=make_http_client(port))
+        # Subscribe BEFORE connecting
+        await conn.subscribe(["KXBTC15M-X"], ["orderbook_delta"])
+        await conn.connect()
+        await asyncio.sleep(0.05)
+        await conn.disconnect()
+
+    assert len(received) == 1
+    assert received[0]["cmd"] == "subscribe"
+    assert "KXBTC15M-X" in received[0]["params"]["market_tickers"]

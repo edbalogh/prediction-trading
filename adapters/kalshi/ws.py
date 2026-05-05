@@ -48,8 +48,10 @@ class KalshiWsConnection:
                 await self._recv_task
             except asyncio.CancelledError:
                 pass
+            self._recv_task = None
         if self._ws is not None:
             await self._ws.close()
+            self._ws = None
 
     async def subscribe(self, tickers: list[str], channels: list[str]) -> None:
         for channel in channels:
@@ -92,4 +94,4 @@ class KalshiWsConnection:
         except asyncio.CancelledError:
             raise
         except Exception:
-            pass
+            _logger.warning("_recv_loop exited with exception", exc_info=True)
