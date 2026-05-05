@@ -138,3 +138,70 @@ def fill_to_trade_tick(
         ts_event=ts_event,
         ts_init=ts_init,
     )
+
+
+def ws_delta_to_order_book_deltas(
+    msg: dict,
+    *,
+    instrument_id: InstrumentId,
+    ts_event: int,
+    ts_init: int,
+) -> list[OrderBookDelta]:
+    deltas: list[OrderBookDelta] = []
+    for price_cents, size in msg.get("yes", []):
+        action = BookAction.UPDATE if size > 0 else BookAction.DELETE
+        order = BookOrder(
+            side=OrderSide.BUY,
+            price=Price(round(price_cents / 100, PRICE_PRECISION), PRICE_PRECISION),
+            size=Quantity(size, SIZE_PRECISION),
+            order_id=0,
+        )
+        deltas.append(OrderBookDelta(
+            instrument_id=instrument_id,
+            action=action,
+            order=order,
+            flags=0,
+            sequence=0,
+            ts_event=ts_event,
+            ts_init=ts_init,
+        ))
+    for price_cents, size in msg.get("no", []):
+        yes_price_cents = 100 - price_cents
+        action = BookAction.UPDATE if size > 0 else BookAction.DELETE
+        order = BookOrder(
+            side=OrderSide.SELL,
+            price=Price(round(yes_price_cents / 100, PRICE_PRECISION), PRICE_PRECISION),
+            size=Quantity(size, SIZE_PRECISION),
+            order_id=0,
+        )
+        deltas.append(OrderBookDelta(
+            instrument_id=instrument_id,
+            action=action,
+            order=order,
+            flags=0,
+            sequence=0,
+            ts_event=ts_event,
+            ts_init=ts_init,
+        ))
+    return deltas
+
+
+def ws_trade_to_trade_tick(
+    msg: dict,
+    *,
+    instrument_id: InstrumentId,
+    ts_init: int,
+) -> TradeTick:
+    yes_price = msg.get("yes_price")
+    price_cents = yes_price if yes_price is not None else (100 - msg["no_price"])
+    aggressor = AggressorSide.BUYER if msg.get("taker_side", "yes") == "yes" else AggressorSide.SELLER
+    trade_id = msg.get("trade_id") or f"{msg['market_ticker']}-{msg['ts']}"
+    return TradeTick(
+        instrument_id=instrument_id,
+        price=Price(round(price_cents / 100, PRICE_PRECISION), PRICE_PRECISION),
+        size=Quantity(msg["count"], SIZE_PRECISION),
+        aggressor_side=aggressor,
+        trade_id=TradeId(trade_id),
+        ts_event=msg["ts"] * 1_000_000,
+        ts_init=ts_init,
+    )

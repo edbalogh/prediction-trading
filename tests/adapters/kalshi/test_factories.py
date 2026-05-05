@@ -66,3 +66,82 @@ def test_fill_to_trade_tick_returns_trade_tick():
     assert tick.price.as_double() == pytest.approx(0.55)
     assert tick.size.as_double() == 10.0
     assert tick.aggressor_side == AggressorSide.BUYER
+
+
+# ── WebSocket factory tests ───────────────────────────────────────────────────
+
+from adapters.kalshi.factories import ws_delta_to_order_book_deltas, ws_trade_to_trade_tick
+from nautilus_trader.model.enums import BookAction, OrderSide
+
+
+def test_ws_delta_to_order_book_deltas_update():
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-X")
+    msg = {"market_ticker": "KXBTC15M-X", "yes": [[55, 150]], "no": []}
+    deltas = ws_delta_to_order_book_deltas(msg, instrument_id=instrument_id, ts_event=1000, ts_init=2000)
+    assert len(deltas) == 1
+    assert deltas[0].action == BookAction.UPDATE
+    assert deltas[0].order.price.as_double() == pytest.approx(0.55)
+    assert deltas[0].order.size.as_double() == 150.0
+    assert deltas[0].order.side == OrderSide.BUY
+
+
+def test_ws_delta_to_order_book_deltas_delete():
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-X")
+    msg = {"market_ticker": "KXBTC15M-X", "yes": [[55, 0]], "no": []}
+    deltas = ws_delta_to_order_book_deltas(msg, instrument_id=instrument_id, ts_event=1000, ts_init=2000)
+    assert len(deltas) == 1
+    assert deltas[0].action == BookAction.DELETE
+
+
+def test_ws_delta_no_side_price_conversion():
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-X")
+    # no_price=45 → yes_equivalent=55 → 0.55
+    msg = {"market_ticker": "KXBTC15M-X", "yes": [], "no": [[45, 100]]}
+    deltas = ws_delta_to_order_book_deltas(msg, instrument_id=instrument_id, ts_event=0, ts_init=0)
+    assert len(deltas) == 1
+    assert deltas[0].order.price.as_double() == pytest.approx(0.55)
+    assert deltas[0].order.side == OrderSide.SELL
+
+
+def test_ws_trade_yes_taker_is_buyer():
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-X")
+    msg = {
+        "market_ticker": "KXBTC15M-X",
+        "yes_price": 55,
+        "no_price": 45,
+        "count": 10,
+        "taker_side": "yes",
+        "ts": 1746400000000,
+    }
+    tick = ws_trade_to_trade_tick(msg, instrument_id=instrument_id, ts_init=9999)
+    assert tick.aggressor_side == AggressorSide.BUYER
+    assert tick.price.as_double() == pytest.approx(0.55)
+    assert tick.size.as_double() == 10.0
+
+
+def test_ws_trade_no_taker_is_seller():
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-X")
+    msg = {
+        "market_ticker": "KXBTC15M-X",
+        "yes_price": 55,
+        "no_price": 45,
+        "count": 5,
+        "taker_side": "no",
+        "ts": 1746400000000,
+    }
+    tick = ws_trade_to_trade_tick(msg, instrument_id=instrument_id, ts_init=9999)
+    assert tick.aggressor_side == AggressorSide.SELLER
+
+
+def test_ws_trade_ts_milliseconds_to_nanoseconds():
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-X")
+    msg = {
+        "market_ticker": "KXBTC15M-X",
+        "yes_price": 55,
+        "no_price": 45,
+        "count": 1,
+        "taker_side": "yes",
+        "ts": 1746400000000,
+    }
+    tick = ws_trade_to_trade_tick(msg, instrument_id=instrument_id, ts_init=0)
+    assert tick.ts_event == 1746400000000 * 1_000_000
