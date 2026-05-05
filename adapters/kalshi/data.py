@@ -70,10 +70,13 @@ class KalshiDataClient(LiveDataClient):
 
     async def _subscribe_orderbook_async(self, ticker: str, instrument_id: InstrumentId) -> None:
         ts_now = time.time_ns()
-        snapshot = self._http.get_orderbook(ticker)
-        deltas = orderbook_snapshot_to_deltas(snapshot, instrument_id=instrument_id, ts_event=ts_now, ts_init=ts_now)
-        for delta in deltas:
-            self._handle_data(delta)
+        try:
+            snapshot = self._http.get_orderbook(ticker)
+            deltas = orderbook_snapshot_to_deltas(snapshot, instrument_id=instrument_id, ts_event=ts_now, ts_init=ts_now)
+            for delta in deltas:
+                self._handle_data(delta)
+        except Exception:
+            _logger.exception("failed to fetch orderbook snapshot for %s", ticker)
         await self._ws.subscribe([ticker], ["orderbook_delta"])
 
     def _on_ws_snapshot(self, msg: dict) -> None:
@@ -81,30 +84,39 @@ class KalshiDataClient(LiveDataClient):
         if instrument_id not in self._subscribed_instruments:
             _logger.warning("snapshot for unsubscribed ticker %s", msg.get("market_ticker"))
             return
-        ts_now = time.time_ns()
-        deltas = orderbook_snapshot_to_deltas(
-            {"orderbook": msg},
-            instrument_id=instrument_id,
-            ts_event=ts_now,
-            ts_init=ts_now,
-        )
-        for delta in deltas:
-            self._handle_data(delta)
+        try:
+            ts_now = time.time_ns()
+            deltas = orderbook_snapshot_to_deltas(
+                {"orderbook": msg},
+                instrument_id=instrument_id,
+                ts_event=ts_now,
+                ts_init=ts_now,
+            )
+            for delta in deltas:
+                self._handle_data(delta)
+        except Exception:
+            _logger.exception("error handling WS snapshot for %s", msg.get("market_ticker"))
 
     def _on_ws_delta(self, msg: dict) -> None:
         instrument_id = kalshi_ticker_to_instrument_id(msg.get("market_ticker", ""))
         if instrument_id not in self._subscribed_instruments:
             _logger.warning("delta for unsubscribed ticker %s", msg.get("market_ticker"))
             return
-        ts_now = time.time_ns()
-        deltas = ws_delta_to_order_book_deltas(msg, instrument_id=instrument_id, ts_event=ts_now, ts_init=ts_now)
-        for delta in deltas:
-            self._handle_data(delta)
+        try:
+            ts_now = time.time_ns()
+            deltas = ws_delta_to_order_book_deltas(msg, instrument_id=instrument_id, ts_event=ts_now, ts_init=ts_now)
+            for delta in deltas:
+                self._handle_data(delta)
+        except Exception:
+            _logger.exception("error handling WS delta for %s", msg.get("market_ticker"))
 
     def _on_ws_trade(self, msg: dict) -> None:
         instrument_id = kalshi_ticker_to_instrument_id(msg.get("market_ticker", ""))
         if instrument_id not in self._subscribed_instruments:
             _logger.warning("trade for unsubscribed ticker %s", msg.get("market_ticker"))
             return
-        tick = ws_trade_to_trade_tick(msg, instrument_id=instrument_id, ts_init=time.time_ns())
-        self._handle_data(tick)
+        try:
+            tick = ws_trade_to_trade_tick(msg, instrument_id=instrument_id, ts_init=time.time_ns())
+            self._handle_data(tick)
+        except Exception:
+            _logger.exception("error handling WS trade for %s", msg.get("market_ticker"))

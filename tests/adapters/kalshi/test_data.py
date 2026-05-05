@@ -148,3 +148,22 @@ async def test_on_ws_trade_emits_trade_tick():
     assert tick.price.as_double() == pytest.approx(0.55)
     assert tick.size.as_double() == 10.0
     assert tick.aggressor_side == AggressorSide.BUYER
+
+
+def test_on_ws_callbacks_ignore_unknown_ticker():
+    fake_ws = FakeWsConnection()
+    client, handled = make_client(fake_ws, MagicMock())
+    # _subscribed_instruments is empty — no ticker is subscribed
+
+    client._on_ws_snapshot({"market_ticker": "UNKNOWN-X", "yes": [[55, 100]], "no": []})
+    client._on_ws_delta({"market_ticker": "UNKNOWN-X", "yes": [[55, 150]], "no": []})
+    client._on_ws_trade({
+        "market_ticker": "UNKNOWN-X",
+        "yes_price": 55,
+        "no_price": 45,
+        "count": 1,
+        "taker_side": "yes",
+        "ts": 1746400000000,
+    })
+
+    assert handled == []
