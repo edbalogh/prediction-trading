@@ -167,3 +167,33 @@ async def test_subscribe_before_connect_replays_on_connect():
     assert len(received) == 1
     assert received[0]["cmd"] == "subscribe"
     assert "KXBTC15M-X" in received[0]["params"]["market_tickers"]
+
+
+async def test_reconnect_resubscribes():
+    events: asyncio.Queue = asyncio.Queue()
+
+    async def handler(ws):
+        async for msg in ws:
+            await events.put(json.loads(msg))
+            # Exit after first subscribe command, causing server to close the connection
+            break
+
+    async with websockets.serve(handler, "localhost", 0) as server:
+        port = server.sockets[0].getsockname()[1]
+        conn = KalshiWsConnection(
+            http_client=make_http_client(port),
+            reconnect_delay=0.05,
+        )
+        conn.on_snapshot = lambda _: None  # silence callback
+        await conn.connect()
+        await conn.subscribe(["KXBTC15M-X"], ["orderbook_delta"])
+
+        first = await asyncio.wait_for(events.get(), timeout=2.0)
+        assert first["cmd"] == "subscribe"
+
+        # Server closed connection after receiving the subscribe; wait for reconnect + re-subscribe
+        second = await asyncio.wait_for(events.get(), timeout=3.0)
+        assert second["cmd"] == "subscribe"
+        assert "KXBTC15M-X" in second["params"]["market_tickers"]
+
+        await conn.disconnect()

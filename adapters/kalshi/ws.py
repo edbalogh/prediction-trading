@@ -80,18 +80,37 @@ class KalshiWsConnection:
                 await self._send_cmd("subscribe", tickers=list(tickers), channels=[channel])
 
     async def _recv_loop(self) -> None:
-        try:
-            async for raw in self._ws:
-                msg = json.loads(raw)
-                msg_type = msg.get("type")
-                payload = msg.get("msg", {})
-                if msg_type == "orderbook_snapshot" and self.on_snapshot:
-                    self.on_snapshot(payload)
-                elif msg_type == "orderbook_delta" and self.on_delta:
-                    self.on_delta(payload)
-                elif msg_type == "trade" and self.on_trade:
-                    self.on_trade(payload)
-        except asyncio.CancelledError:
-            raise
-        except Exception:
-            _logger.warning("_recv_loop exited with exception", exc_info=True)
+        delay = self._reconnect_delay
+        while not self._stop:
+            try:
+                async for raw in self._ws:
+                    msg = json.loads(raw)
+                    msg_type = msg.get("type")
+                    payload = msg.get("msg", {})
+                    if msg_type == "orderbook_snapshot" and self.on_snapshot:
+                        self.on_snapshot(payload)
+                    elif msg_type == "orderbook_delta" and self.on_delta:
+                        self.on_delta(payload)
+                    elif msg_type == "trade" and self.on_trade:
+                        self.on_trade(payload)
+            except asyncio.CancelledError:
+                raise
+            except Exception:
+                _logger.warning("WebSocket error, will reconnect", exc_info=True)
+
+            if self._stop:
+                break
+
+            await asyncio.sleep(delay)
+            delay = min(delay * 2, self._reconnect_max_delay)
+
+            try:
+                self._ws = await websockets.connect(
+                    self._http.websocket_url(),
+                    additional_headers=self._http.websocket_headers(),
+                )
+                await self._replay_subscriptions()
+                delay = self._reconnect_delay
+                _logger.info("WebSocket reconnected")
+            except Exception:
+                _logger.warning("Reconnect attempt failed, will retry in %.1fs", delay)
