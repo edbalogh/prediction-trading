@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import logging
 import time
 
@@ -71,7 +72,7 @@ class KalshiDataClient(LiveDataClient):
     async def _subscribe_orderbook_async(self, ticker: str, instrument_id: InstrumentId) -> None:
         ts_now = time.time_ns()
         try:
-            snapshot = self._http.get_orderbook(ticker)
+            snapshot = await asyncio.to_thread(self._http.get_orderbook, ticker)
             deltas = orderbook_snapshot_to_deltas(snapshot, instrument_id=instrument_id, ts_event=ts_now, ts_init=ts_now)
             for delta in deltas:
                 self._handle_data(delta)

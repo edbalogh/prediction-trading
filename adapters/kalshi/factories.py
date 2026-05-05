@@ -201,7 +201,7 @@ def ws_trade_to_trade_tick(
     else:
         raise ValueError(f"ws trade msg has neither yes_price nor no_price: {msg}")
     aggressor = AggressorSide.BUYER if msg.get("taker_side", "yes") == "yes" else AggressorSide.SELLER
-    trade_id = msg.get("trade_id") or f"{msg['market_ticker']}-{msg['ts']}"
+    trade_id = msg.get("trade_id") or f"{msg.get('market_ticker', 'unknown')}-{msg.get('ts', 0)}"
     return TradeTick(
         instrument_id=instrument_id,
         price=Price(round(price_cents / 100, PRICE_PRECISION), PRICE_PRECISION),
