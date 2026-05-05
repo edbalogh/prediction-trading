@@ -193,7 +193,13 @@ def ws_trade_to_trade_tick(
     ts_init: int,
 ) -> TradeTick:
     yes_price = msg.get("yes_price")
-    price_cents = yes_price if yes_price is not None else (100 - msg["no_price"])
+    no_price = msg.get("no_price")
+    if yes_price is not None:
+        price_cents = yes_price
+    elif no_price is not None:
+        price_cents = 100 - no_price
+    else:
+        raise ValueError(f"ws trade msg has neither yes_price nor no_price: {msg}")
     aggressor = AggressorSide.BUYER if msg.get("taker_side", "yes") == "yes" else AggressorSide.SELLER
     trade_id = msg.get("trade_id") or f"{msg['market_ticker']}-{msg['ts']}"
     return TradeTick(

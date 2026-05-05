@@ -1,7 +1,7 @@
 import pytest
 from nautilus_trader.model.identifiers import InstrumentId, Symbol
 from nautilus_trader.model.instruments import BinaryOption
-from nautilus_trader.model.enums import AggressorSide
+from nautilus_trader.model.enums import AggressorSide, BookAction, OrderSide
 
 from adapters.kalshi.constants import KALSHI_VENUE
 from adapters.kalshi.factories import (
@@ -9,6 +9,8 @@ from adapters.kalshi.factories import (
     kalshi_ticker_to_instrument_id,
     orderbook_snapshot_to_deltas,
     fill_to_trade_tick,
+    ws_delta_to_order_book_deltas,
+    ws_trade_to_trade_tick,
 )
 
 
@@ -69,9 +71,6 @@ def test_fill_to_trade_tick_returns_trade_tick():
 
 
 # ── WebSocket factory tests ───────────────────────────────────────────────────
-
-from adapters.kalshi.factories import ws_delta_to_order_book_deltas, ws_trade_to_trade_tick
-from nautilus_trader.model.enums import BookAction, OrderSide
 
 
 def test_ws_delta_to_order_book_deltas_update():
