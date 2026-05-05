@@ -58,7 +58,9 @@ def orderbook_snapshot_to_deltas(
     ts_event: int,
     ts_init: int,
 ) -> list[OrderBookDelta]:
-    deltas: list[OrderBookDelta] = []
+    deltas: list[OrderBookDelta] = [
+        OrderBookDelta.clear(instrument_id, sequence=0, ts_event=ts_event, ts_init=ts_init),
+    ]
     orderbook = snapshot.get("orderbook", {})
 
     for price_cents, size in orderbook.get("yes", []):

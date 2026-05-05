@@ -93,7 +93,8 @@ async def test_on_ws_snapshot_emits_order_book_deltas():
     snapshot_msg = {"market_ticker": "KXBTC15M-X", "yes": [[55, 100], [54, 200]], "no": [[45, 50]]}
     client._on_ws_snapshot(snapshot_msg)
 
-    assert len(handled) == 3
+    assert len(handled) == 4  # CLEAR + 2 yes + 1 no
+    assert handled[0].action == BookAction.CLEAR
     assert all(isinstance(d, OrderBookDelta) for d in handled)
 
 

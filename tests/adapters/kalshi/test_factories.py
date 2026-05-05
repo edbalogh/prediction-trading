@@ -62,6 +62,13 @@ def test_orderbook_snapshot_to_deltas_returns_list():
     assert len(deltas) > 0
 
 
+def test_orderbook_snapshot_to_deltas_starts_with_clear():
+    from nautilus_trader.model.enums import BookAction
+    instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-25APR30-T65499.99")
+    deltas = orderbook_snapshot_to_deltas(SAMPLE_ORDERBOOK, instrument_id=instrument_id, ts_event=1000, ts_init=1000)
+    assert deltas[0].action == BookAction.CLEAR
+
+
 def test_fill_to_trade_tick_returns_trade_tick():
     instrument_id = kalshi_ticker_to_instrument_id("KXBTC15M-25APR30-T65499.99")
     tick = fill_to_trade_tick(SAMPLE_FILL, instrument_id=instrument_id, ts_init=1000)
