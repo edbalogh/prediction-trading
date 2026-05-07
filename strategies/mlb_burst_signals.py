@@ -2,13 +2,14 @@ from __future__ import annotations
 
 from collections import deque
 from dataclasses import dataclass
+from typing import Literal
 
 from nautilus_trader.model.data import TradeTick
 
 
 @dataclass(frozen=True)
 class SweepResult:
-    side: str        # "YES" or "NO"
+    side: Literal["YES", "NO"]
     end_price: float
     end_ts: int      # nanoseconds
 
@@ -23,9 +24,10 @@ def detect_sweep(
     """
     Scan ticks for a price burst satisfying:
     - >= min_fills within max_duration_s seconds
-    - Price spread >= min_spread_cents / 100
+    - Price spread >= min_spread_cents / 100 (e.g., 3 cents = 0.03)
     - Clear net direction (start != end price)
 
+    Precondition: ticks must be sorted ascending by ts_event (deque appended in arrival order).
     Backtest note: test alternate thresholds (different min_spread_cents, min_fills,
     max_duration_s) against the reference dataset before live deployment.
     """
@@ -76,6 +78,7 @@ def confirm_w1(
     Backtest note: test removing condition 3, varying same_dir_pct (0.5–0.8), and
     replacing condition 2 with consecutive-direction counting against the reference dataset.
     """
+    assert min_trades >= 1, "min_trades must be >= 1"
     start_ns = sweep.end_ts + int(window_start_s * 1_000_000_000)
     end_ns = sweep.end_ts + int(window_end_s * 1_000_000_000)
     window_ticks = [t for t in ticks if start_ns <= t.ts_event <= end_ns]

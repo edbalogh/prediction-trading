@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import uuid
 from collections import deque
 
 from nautilus_trader.model.data import TradeTick
@@ -11,18 +12,15 @@ from strategies.mlb_burst_signals import SweepResult, detect_sweep, confirm_w1
 
 KALSHI = Venue("KALSHI")
 IID = InstrumentId(Symbol("KXMLBGAME-26MAY01-AZ"), KALSHI)
-_tid = 0
 
 
 def _tick(price: float, ts_event: int) -> TradeTick:
-    global _tid
-    _tid += 1
     return TradeTick(
         instrument_id=IID,
         price=Price(price, 2),
         size=Quantity(1, 0),
         aggressor_side=AggressorSide.BUYER,
-        trade_id=TradeId(f"t{_tid}"),
+        trade_id=TradeId(uuid.uuid4().hex[:8]),
         ts_event=ts_event,
         ts_init=ts_event,
     )
@@ -84,11 +82,13 @@ def test_detect_sweep_returns_none_if_window_exceeded():
 
 
 def test_detect_sweep_returns_none_if_no_direction():
+    # Spread passes but start==end price → no net direction
     buf = deque([
-        _tick(0.50, ms(0)),
-        _tick(0.50, ms(200)),   # same price, no direction
+        _tick(0.30, ms(0)),
+        _tick(0.40, ms(100)),
+        _tick(0.30, ms(200)),   # net: start 0.30 == end 0.30, no direction despite spread
     ])
-    result = detect_sweep(buf, min_fills=2, max_duration_s=0.5, min_spread_cents=3)
+    result = detect_sweep(buf, min_fills=3, max_duration_s=0.5, min_spread_cents=3)
     assert result is None
 
 
