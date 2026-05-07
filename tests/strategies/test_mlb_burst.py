@@ -189,7 +189,9 @@ def test_tick_buffer_prunes_old_entries():
     new_tick = _tick(ticker, 0.40, recent_ts + 1_000_000)
     strat.on_trade_tick(new_tick)
 
-    assert buf[0].ts_event >= recent_ts - 60_000_000_000
+    # Old tick (old_ts=0) should be pruned; buffer should contain recent_ts tick + new_tick
+    assert len(buf) >= 2
+    assert buf[0].ts_event == recent_ts
 
 
 def test_sweep_detected_stores_pending_sweep():
@@ -273,6 +275,30 @@ async def test_skips_entry_when_already_entered_game():
     await asyncio.sleep(0)
 
     strat.submit_order.assert_not_called()
+
+
+@pytest.mark.asyncio
+async def test_skips_entry_when_mlb_stats_game_state_fails():
+    strat, ticker = _make_strategy()
+    buf = strat._buffers[ticker]
+    strat._mlb_stats.async_get_game_state = AsyncMock(
+        side_effect=RuntimeError("connection timeout")
+    )
+
+    from strategies.mlb_burst_signals import SweepResult
+    strat._pending_sweeps[ticker] = SweepResult(
+        side="YES", end_price=0.40, end_ts=ms(0)
+    )
+    buf.append(_tick(ticker, 0.41, ms(400)))
+    buf.append(_tick(ticker, 0.42, ms(600)))
+
+    strat.on_trade_tick(_tick(ticker, 0.42, ms(700)))
+    await asyncio.sleep(0)
+    await asyncio.sleep(0)
+
+    strat.submit_order.assert_not_called()
+    # game_pk should NOT be in entered_games (entry slot released on failure)
+    assert 12345 not in strat._entered_games
 
 
 @pytest.mark.asyncio

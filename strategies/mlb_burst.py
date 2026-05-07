@@ -88,6 +88,12 @@ class MLBBurstStrategy(Strategy):
 
     def on_start(self) -> None:
         self._ready = False
+        self._buffers.clear()
+        self._ticker_to_game_pk.clear()
+        self._pending_sweeps.clear()
+        self._entered_games.clear()
+        self._position_qty.clear()
+        # Note: do NOT clear _pending_tasks here — if tasks are running, they need on_stop() first
         self.create_task(self._discover_markets())
 
     async def _discover_markets(self) -> None:
@@ -191,20 +197,24 @@ class MLBBurstStrategy(Strategy):
         ticker = instrument_id.symbol.value
         game_pk = self._ticker_to_game_pk[ticker]
 
+        # Reserve synchronously before yielding to avoid double-entry race
         if game_pk in self._entered_games:
             _logger.info("skip %s: already entered game %d", ticker, game_pk)
             return
+        self._entered_games.add(game_pk)
 
         try:
             game_state = await self._mlb_stats.async_get_game_state(game_pk)
         except Exception:
             _logger.warning("MLB Stats call failed for %s — skip entry", ticker)
+            self._entered_games.discard(game_pk)
             return
 
         if game_state.get("half", "").lower() != "bottom":
             _logger.info(
                 "skip %s: not bottom half (half=%s)", ticker, game_state.get("half")
             )
+            self._entered_games.discard(game_pk)
             return
 
         qty = _compute_qty(entry_price, max_notional=self.config.max_notional_usd)
@@ -216,7 +226,6 @@ class MLBBurstStrategy(Strategy):
         self.submit_order(order)
 
         entry_ts = self.clock.timestamp_ns()
-        self._entered_games.add(game_pk)
         self._position_qty[ticker] = qty
         task = self.create_task(
             self._hold_or_bail(ticker, game_pk, sweep.end_ts, entry_ts)
@@ -259,6 +268,7 @@ class MLBBurstStrategy(Strategy):
                 )
                 qty = self._position_qty.get(ticker, 0)
                 if qty > 0:
+                    # Reconstruct InstrumentId from ticker since this method doesn't receive it directly
                     instrument_id = kalshi_ticker_to_instrument_id(ticker)
                     order = self.order_factory.market(
                         instrument_id=instrument_id,
