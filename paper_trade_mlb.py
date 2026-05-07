@@ -54,7 +54,6 @@ def _build_state_response(node: TradingNode, strategy: MLBBurstStrategy) -> dict
         return {"error": "exec client not ready"}
 
     cache = node.cache
-    cash = exec_client.cash()
     raw_positions = exec_client.positions()
 
     unrealized_pnl = 0.0
