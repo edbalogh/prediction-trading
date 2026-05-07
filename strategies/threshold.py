@@ -3,7 +3,7 @@ from __future__ import annotations
 from nautilus_trader.config import StrategyConfig
 from nautilus_trader.model.data import TradeTick
 from nautilus_trader.model.enums import OrderSide
-from nautilus_trader.model.identifiers import InstrumentId, Symbol, Venue
+from nautilus_trader.model.identifiers import InstrumentId, Venue
 from nautilus_trader.model.objects import Quantity
 from nautilus_trader.trading.strategy import Strategy
 
