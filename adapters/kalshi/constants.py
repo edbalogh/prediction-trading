@@ -2,7 +2,7 @@ from nautilus_trader.model.identifiers import Venue
 
 KALSHI_VENUE = Venue("KALSHI")
 
-KALSHI_BASE_URL = "https://trading-api.kalshi.com/trade-api/v2"
+KALSHI_BASE_URL = "https://api.elections.kalshi.com/trade-api/v2"
 KALSHI_DEMO_URL = "https://demo-api.kalshi.co/trade-api/v2"
 
 PRICE_PRECISION = 2      # Kalshi prices are cents: 0.01 to 1.00

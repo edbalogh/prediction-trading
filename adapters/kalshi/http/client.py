@@ -117,11 +117,13 @@ class KalshiHttpClient:
     # ── Internal ──────────────────────────────────────────────────────────────
 
     def _sign_headers(self, method: str, path: str) -> dict[str, str]:
+        from urllib.parse import urlparse
         ts_ms = str(int(time.time() * 1000))
+        full_path = urlparse(self._base_url).path + path
         return {
             "KALSHI-ACCESS-KEY": self._api_key,
             "KALSHI-ACCESS-TIMESTAMP": ts_ms,
-            "KALSHI-ACCESS-SIGNATURE": sign_request(self._key, timestamp_ms=ts_ms, method=method, path=path),
+            "KALSHI-ACCESS-SIGNATURE": sign_request(self._key, timestamp_ms=ts_ms, method=method, path=full_path),
         }
 
     def _request(
