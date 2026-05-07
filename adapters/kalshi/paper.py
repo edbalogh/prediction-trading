@@ -1,12 +1,11 @@
 from __future__ import annotations
 
-import asyncio
+import copy
 import time
 import logging
 
 from pydantic import ConfigDict
 from nautilus_trader.config import LiveExecClientConfig
-from nautilus_trader.core.uuid import UUID4
 from nautilus_trader.live.execution_client import LiveExecutionClient
 from nautilus_trader.live.factories import LiveExecClientFactory
 from nautilus_trader.model.enums import (
@@ -15,7 +14,7 @@ from nautilus_trader.model.enums import (
 from nautilus_trader.model.identifiers import (
     ClientId, TradeId, VenueOrderId,
 )
-from nautilus_trader.model.objects import Currency, Money, Price, Quantity
+from nautilus_trader.model.objects import Currency, Money, Price
 
 from adapters.kalshi.constants import KALSHI_VENUE
 
@@ -31,20 +30,8 @@ class PaperExecClientConfig(LiveExecClientConfig):
 
 
 class PaperExecutionClient(LiveExecutionClient):
-    def __init__(
-        self,
-        *,
-        config: PaperExecClientConfig,
-        loop: asyncio.AbstractEventLoop | None = None,
-        **kwargs,
-    ) -> None:
-        if loop is None:
-            try:
-                loop = asyncio.get_event_loop()
-            except RuntimeError:
-                loop = asyncio.new_event_loop()
+    def __init__(self, *, config: PaperExecClientConfig, **kwargs) -> None:
         super().__init__(
-            loop=loop,
             client_id=ClientId("KALSHI"),
             venue=KALSHI_VENUE,
             oms_type=OmsType.NETTING,
@@ -55,7 +42,7 @@ class PaperExecutionClient(LiveExecutionClient):
         )
         self._starting_cash = config.starting_cash
         self._cash: float = config.starting_cash
-        self._positions: dict[str, dict] = {}  # ticker -> {qty, avg_px}
+        self._positions: dict[str, dict] = {}
         self._fills: list[dict] = []
         self._fill_counter: int = 0
 
@@ -78,8 +65,9 @@ class PaperExecutionClient(LiveExecutionClient):
         ticker = instrument_id.symbol.value
         ts_now = time.time_ns()
 
-        venue_order_id = VenueOrderId(f"paper-{self._fill_counter}")
+        fill_id = self._fill_counter
         self._fill_counter += 1
+        venue_order_id = VenueOrderId(f"paper-{fill_id}")
 
         self.generate_order_accepted(
             strategy_id=command.strategy_id,
@@ -100,7 +88,7 @@ class PaperExecutionClient(LiveExecutionClient):
             client_order_id=order.client_order_id,
             venue_order_id=venue_order_id,
             venue_position_id=None,
-            trade_id=TradeId(f"paper-trade-{self._fill_counter}"),
+            trade_id=TradeId(f"paper-trade-{fill_id}"),
             order_side=order.side,
             order_type=OrderType.MARKET,
             last_qty=order.quantity,
@@ -124,6 +112,11 @@ class PaperExecutionClient(LiveExecutionClient):
             else:
                 self._positions[ticker] = {"qty": qty, "avg_px": fill_price_float}
         else:
+            if ticker not in self._positions:
+                _logger.warning(
+                    "SELL for %s with no open position — cash credited but no position to close",
+                    ticker,
+                )
             self._cash += fill_price_float * qty
             if ticker in self._positions:
                 remaining = self._positions[ticker]["qty"] - qty
@@ -147,7 +140,7 @@ class PaperExecutionClient(LiveExecutionClient):
         return self._cash
 
     def positions(self) -> dict[str, dict]:
-        return dict(self._positions)
+        return copy.deepcopy(self._positions)
 
     def fills(self) -> list[dict]:
         return list(self._fills)
@@ -159,6 +152,7 @@ class PaperExecClientFactory(LiveExecClientFactory):
         global _paper_exec_client
         from nautilus_trader.common.providers import InstrumentProvider
         client = PaperExecutionClient(
+            loop=loop,
             config=config,
             instrument_provider=InstrumentProvider(),
             msgbus=msgbus,
