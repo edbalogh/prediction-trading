@@ -43,7 +43,14 @@ def _parse_home_name(title: str) -> str:
 
 
 def _match_game_pk(home_name: str, mlb_games: list[dict]) -> int | None:
-    """Match a Kalshi home team name to an MLB Stats gamePk."""
+    """Match a Kalshi home team name to an MLB Stats gamePk.
+
+    Tries three strategies in order:
+    1. Exact match against home_city or full home_name
+    2. City-prefix match with optional team abbreviation suffix (e.g. "New York M" → Mets)
+    3. Name-prefix match: Kalshi name is a prefix of the full MLB team name
+       (e.g. "San Diego" prefix of "San Diego Padres")
+    """
     normalized = home_name.lower()
     for game in mlb_games:
         city = (game.get("home_city") or "").lower()
@@ -57,6 +64,9 @@ def _match_game_pk(home_name: str, mlb_games: list[dict]) -> int | None:
             name_words = name.split()
             if name_words and name_words[-1].startswith(suffix):
                 return game["gamePk"]
+        # MLB Stats API sometimes returns empty city; fall back to name-prefix matching
+        if name and name.startswith(normalized):
+            return game["gamePk"]
     return None
 
 
@@ -95,7 +105,7 @@ class MLBBurstStrategy(Strategy):
         self._entered_games.clear()
         self._position_qty.clear()
         # Note: do NOT clear _pending_tasks here — if tasks are running, they need on_stop() first
-        self.create_task(self._discover_markets())
+        asyncio.ensure_future(self._discover_markets())
 
     async def _discover_markets(self) -> None:
         today = datetime.now(timezone.utc).strftime("%Y-%m-%d")
@@ -186,7 +196,7 @@ class MLBBurstStrategy(Strategy):
             cached = self.cache.price(tick.instrument_id, PriceType.LAST)
             if cached is not None:
                 entry_price = cached.as_double()
-            task = self.create_task(
+            task = asyncio.ensure_future(
                 self._check_filters_and_enter(tick.instrument_id, sweep, entry_price)
             )
             self._filter_tasks.add(task)
@@ -233,7 +243,7 @@ class MLBBurstStrategy(Strategy):
 
         entry_ts = self.clock.timestamp_ns()
         self._position_qty[ticker] = qty
-        task = self.create_task(
+        task = asyncio.ensure_future(
             self._hold_or_bail(ticker, game_pk, sweep.end_ts, entry_ts)
         )
         self._pending_tasks[ticker] = task

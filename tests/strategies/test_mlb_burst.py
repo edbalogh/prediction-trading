@@ -169,10 +169,6 @@ def _make_strategy():
     strat.__dict__["_mock_order_factory"] = mock_order_factory
     MLBBurstStrategy.order_factory = property(lambda self: self.__dict__["_mock_order_factory"])  # type: ignore[assignment]
 
-    # create_task is only available when wired into NautilusTrader's runtime.
-    # Replace it with asyncio.ensure_future so coroutines are actually scheduled.
-    strat.create_task = asyncio.ensure_future  # type: ignore[method-assign]
-
     return strat, ticker
 
 
