@@ -16,7 +16,6 @@ from datetime import datetime, timezone
 
 from aiohttp import web
 from nautilus_trader.config import (
-    InstrumentProviderConfig,
     LiveDataEngineConfig,
     LiveExecEngineConfig,
     LoggingConfig,
