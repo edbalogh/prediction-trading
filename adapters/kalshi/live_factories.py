@@ -40,6 +40,7 @@ class KalshiExecClientFactory(LiveExecClientFactory):
             config=KalshiDataClientConfig(
                 api_key=config.api_key,
                 private_key_pem=config.private_key_pem,
+                base_url=config.base_url,
             ),
         )
         return KalshiExecutionClient(

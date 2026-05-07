@@ -26,6 +26,7 @@ from nautilus_trader.model.enums import PriceType
 from nautilus_trader.model.identifiers import InstrumentId, Symbol, Venue
 
 from adapters.kalshi.config import KalshiDataClientConfig
+from adapters.kalshi.constants import KALSHI_BASE_URL
 from adapters.kalshi.http.client import KalshiHttpClient
 from adapters.kalshi.live_factories import KalshiDataClientFactory
 from adapters.kalshi.paper import PaperExecClientConfig, PaperExecClientFactory
@@ -82,7 +83,7 @@ def _build_state_response(node: TradingNode) -> dict:
     }
 
 
-async def run_state_server(node: TradingNode) -> None:
+async def run_state_server(node: TradingNode) -> web.AppRunner:
     async def handle_state(request):
         data = _build_state_response(node)
         return web.Response(
@@ -98,6 +99,7 @@ async def run_state_server(node: TradingNode) -> None:
     site = web.TCPSite(runner, "localhost", STATE_PORT)
     await site.start()
     _logger.info("StateServer listening on http://localhost:%d/state", STATE_PORT)
+    return runner
 
 
 def main() -> None:
@@ -105,7 +107,7 @@ def main() -> None:
     private_key_pem = os.environ["KALSHI_PRIVATE_KEY_PEM"]
 
     http_client = KalshiHttpClient(
-        base_url="https://trading-api.kalshi.com/trade-api/v2",
+        base_url=KALSHI_BASE_URL,
         api_key=api_key,
         private_key_pem=private_key_pem,
     )
@@ -116,6 +118,7 @@ def main() -> None:
     )
     provider = KalshiInstrumentProvider(http_client=http_client, config=data_config)
     provider.load_series(SERIES)
+    http_client.close()
     instruments = provider.get_all()
 
     if not instruments:
@@ -161,8 +164,11 @@ def main() -> None:
     node.build()
 
     async def _run():
-        await run_state_server(node)
-        await node.run_async()
+        runner = await run_state_server(node)
+        try:
+            await node.run_async()
+        finally:
+            await runner.cleanup()
 
     try:
         asyncio.run(_run())
@@ -172,13 +178,17 @@ def main() -> None:
         exec_client = paper_mod._paper_exec_client
         if exec_client:
             cash = exec_client.cash()
-            pnl = cash - STARTING_CAPITAL
             fills = exec_client.fills()
+            open_positions = exec_client.positions()
+            mtm = sum(p["qty"] * p["avg_px"] for p in open_positions.values())
+            equity = cash + mtm
+            pnl = equity - STARTING_CAPITAL
             print(f"\n{'='*50}")
             print(f"  Final P&L: ${pnl:+.2f}")
+            print(f"  Equity:    ${equity:.2f}")
             print(f"  Cash:      ${cash:.2f}")
             print(f"  Fills:     {len(fills)}")
-            print(f"  Positions: {len(exec_client.positions())}")
+            print(f"  Positions: {len(open_positions)}")
             print(f"{'='*50}")
 
 
