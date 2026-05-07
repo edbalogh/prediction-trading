@@ -85,6 +85,7 @@ class MLBBurstStrategy(Strategy):
         self._entered_games: set[int] = set()
         self._position_qty: dict[str, int] = {}
         self._pending_tasks: dict[str, asyncio.Task] = {}
+        self._filter_tasks: set[asyncio.Task] = set()
 
     def on_start(self) -> None:
         self._ready = False
@@ -102,6 +103,7 @@ class MLBBurstStrategy(Strategy):
             markets = await asyncio.to_thread(
                 self._kalshi_http.list_markets_paged,
                 series_ticker="KXMLBGAME",
+                status="open",
             )
             mlb_games = await self._mlb_stats.async_get_schedule(today)
         except Exception:
@@ -184,9 +186,11 @@ class MLBBurstStrategy(Strategy):
             cached = self.cache.price(tick.instrument_id, PriceType.LAST)
             if cached is not None:
                 entry_price = cached.as_double()
-            self.create_task(
+            task = self.create_task(
                 self._check_filters_and_enter(tick.instrument_id, sweep, entry_price)
             )
+            self._filter_tasks.add(task)
+            task.add_done_callback(self._filter_tasks.discard)
 
     async def _check_filters_and_enter(
         self,
@@ -195,7 +199,9 @@ class MLBBurstStrategy(Strategy):
         entry_price: float,
     ) -> None:
         ticker = instrument_id.symbol.value
-        game_pk = self._ticker_to_game_pk[ticker]
+        game_pk = self._ticker_to_game_pk.get(ticker)
+        if game_pk is None:
+            return
 
         # Reserve synchronously before yielding to avoid double-entry race
         if game_pk in self._entered_games:
@@ -280,6 +286,9 @@ class MLBBurstStrategy(Strategy):
             self._pending_tasks.pop(ticker, None)
 
     def on_stop(self) -> None:
+        for task in list(self._filter_tasks):
+            task.cancel()
+        self._filter_tasks.clear()
         for task in list(self._pending_tasks.values()):
             task.cancel()
         self._pending_tasks.clear()

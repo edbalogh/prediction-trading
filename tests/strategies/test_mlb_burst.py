@@ -321,6 +321,7 @@ async def test_skips_entry_when_top_half():
     await asyncio.sleep(0)
 
     strat.submit_order.assert_not_called()
+    assert 12345 not in strat._entered_games
 
 
 # ── Hold/bail coroutine ────────────────────────────────────────────────────────

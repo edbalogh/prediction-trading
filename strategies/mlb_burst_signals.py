@@ -78,7 +78,8 @@ def confirm_w1(
     Backtest note: test removing condition 3, varying same_dir_pct (0.5–0.8), and
     replacing condition 2 with consecutive-direction counting against the reference dataset.
     """
-    assert min_trades >= 1, "min_trades must be >= 1"
+    if min_trades < 1:
+        raise ValueError("min_trades must be >= 1")
     start_ns = sweep.end_ts + int(window_start_s * 1_000_000_000)
     end_ns = sweep.end_ts + int(window_end_s * 1_000_000_000)
     window_ticks = [t for t in ticks if start_ns <= t.ts_event <= end_ns]
