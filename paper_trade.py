@@ -3,7 +3,9 @@
 Paper trade the ThresholdStrategy against live Kalshi Challenger tennis markets.
 
 Usage:
-    KALSHI_API_KEY=... KALSHI_PRIVATE_KEY_PEM="$(cat key.pem)" python3 paper_trade.py
+    python3 paper_trade.py
+
+Credentials are loaded from .env in the project root. See .env for the format.
 """
 from __future__ import annotations
 
@@ -13,6 +15,9 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+
+from dotenv import load_dotenv
+load_dotenv()
 
 from aiohttp import web
 from nautilus_trader.config import (
