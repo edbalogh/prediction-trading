@@ -81,7 +81,7 @@
 <div id="panel-papertrade" class="panel">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:12px">
     <span style="font-size:1.1em;font-weight:600">Live Paper Trade — KXATPCHALLENGERMATCH</span>
-    <span id="pt-status" style="padding:2px 10px;border-radius:4px;font-size:0.8em;font-weight:700;background:#238636;color:#fff">CONNECTING</span>
+    <span id="pt-status" style="padding:2px 10px;border-radius:4px;font-size:0.8em;font-weight:700;background:#8b949e;color:#fff">CONNECTING</span>
   </div>
   <div class="chart-block">
     <div class="chart-title">Equity Curve (starting $10,000)</div>
@@ -329,11 +329,18 @@ renderSinglePanel("KXATPCHALLENGERMATCH", "challenger");
     return v >= 0 ? "pos" : "neg";
   }
 
+  function esc(s) {
+    return String(s).replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+  }
+
   async function fetchState() {
     try {
       const resp = await fetch(STATE_URL);
       if (!resp.ok) throw new Error("HTTP " + resp.status);
       const data = await resp.json();
+      if (!data || data.error || data.positions === undefined || data.equity === undefined) {
+        throw new Error(data && data.error ? data.error : "incomplete state");
+      }
 
       document.getElementById("pt-status").textContent = "LIVE";
       document.getElementById("pt-status").style.background = "#238636";
@@ -382,7 +389,7 @@ renderSinglePanel("KXATPCHALLENGERMATCH", "challenger");
           const p = data.positions[t];
           const pnl = p.mtm_pnl;
           return `<tr>
-            <td style="padding:4px 8px;font-size:0.75em">${t}</td>
+            <td style="padding:4px 8px;font-size:0.75em">${esc(t)}</td>
             <td style="text-align:right;padding:4px 8px">${p.qty}</td>
             <td style="text-align:right;padding:4px 8px">${p.avg_px.toFixed(3)}</td>
             <td style="text-align:right;padding:4px 8px">${p.last_px.toFixed(3)}</td>
@@ -400,8 +407,8 @@ renderSinglePanel("KXATPCHALLENGERMATCH", "challenger");
           const sideColor = f.side === "BUY" ? "#3fb950" : "#f85149";
           const t = new Date(f.ts * 1000).toLocaleTimeString();
           return `<tr>
-            <td style="padding:4px 8px;font-size:0.75em">${f.ticker}</td>
-            <td style="text-align:center;padding:4px 8px;color:${sideColor};font-weight:700">${f.side}</td>
+            <td style="padding:4px 8px;font-size:0.75em">${esc(f.ticker)}</td>
+            <td style="text-align:center;padding:4px 8px;color:${sideColor};font-weight:700">${esc(f.side)}</td>
             <td style="text-align:right;padding:4px 8px">${f.qty}</td>
             <td style="text-align:right;padding:4px 8px">${f.price.toFixed(3)}</td>
             <td style="text-align:right;padding:4px 8px;color:#8b949e">${t}</td>
