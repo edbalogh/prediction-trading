@@ -1,0 +1,187 @@
+#!/usr/bin/env python3
+"""
+Paper trade the ThresholdStrategy against live Kalshi Challenger tennis markets.
+
+Usage:
+    KALSHI_API_KEY=... KALSHI_PRIVATE_KEY_PEM="$(cat key.pem)" python3 paper_trade.py
+"""
+from __future__ import annotations
+
+import asyncio
+import json
+import logging
+import os
+import time
+from datetime import datetime, timezone
+
+from aiohttp import web
+from nautilus_trader.config import (
+    InstrumentProviderConfig,
+    LiveDataEngineConfig,
+    LiveExecEngineConfig,
+    LoggingConfig,
+    TradingNodeConfig,
+)
+from nautilus_trader.live.node import TradingNode
+from nautilus_trader.model.enums import PriceType
+from nautilus_trader.model.identifiers import InstrumentId, Symbol, Venue
+
+from adapters.kalshi.config import KalshiDataClientConfig
+from adapters.kalshi.http.client import KalshiHttpClient
+from adapters.kalshi.live_factories import KalshiDataClientFactory
+from adapters.kalshi.paper import PaperExecClientConfig, PaperExecClientFactory
+import adapters.kalshi.paper as paper_mod
+from adapters.kalshi.providers import KalshiInstrumentProvider
+from strategies.threshold import ThresholdConfig, ThresholdStrategy
+
+SERIES = "KXATPCHALLENGERMATCH"
+STARTING_CAPITAL = 10_000.0
+STATE_PORT = 8765
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(name)s — %(message)s",
+)
+_logger = logging.getLogger(__name__)
+
+
+def _build_state_response(node: TradingNode) -> dict:
+    exec_client = paper_mod._paper_exec_client
+    if exec_client is None:
+        return {"error": "exec client not ready"}
+
+    cache = node.cache
+    cash = exec_client.cash()
+    raw_positions = exec_client.positions()
+
+    mtm = 0.0
+    positions_out = {}
+    kalshi_venue = Venue("KALSHI")
+    for ticker, pos_info in raw_positions.items():
+        iid = InstrumentId(Symbol(ticker), kalshi_venue)
+        last_price_obj = cache.price(iid, PriceType.LAST)
+        last_px = last_price_obj.as_double() if last_price_obj is not None else pos_info["avg_px"]
+        qty = pos_info["qty"]
+        mtm += qty * last_px
+        positions_out[ticker] = {
+            "qty": qty,
+            "avg_px": round(pos_info["avg_px"], 4),
+            "last_px": round(last_px, 4),
+            "mtm_pnl": round((last_px - pos_info["avg_px"]) * qty, 4),
+        }
+
+    equity = cash + mtm
+    pnl = equity - STARTING_CAPITAL
+
+    return {
+        "equity": round(equity, 4),
+        "starting_capital": STARTING_CAPITAL,
+        "pnl": round(pnl, 4),
+        "positions": positions_out,
+        "fills": exec_client.fills()[-20:],
+        "ts": int(time.time()),
+    }
+
+
+async def run_state_server(node: TradingNode) -> None:
+    async def handle_state(request):
+        data = _build_state_response(node)
+        return web.Response(
+            text=json.dumps(data),
+            content_type="application/json",
+            headers={"Access-Control-Allow-Origin": "*"},
+        )
+
+    app = web.Application()
+    app.router.add_get("/state", handle_state)
+    runner = web.AppRunner(app)
+    await runner.setup()
+    site = web.TCPSite(runner, "localhost", STATE_PORT)
+    await site.start()
+    _logger.info("StateServer listening on http://localhost:%d/state", STATE_PORT)
+
+
+def main() -> None:
+    api_key = os.environ["KALSHI_API_KEY"]
+    private_key_pem = os.environ["KALSHI_PRIVATE_KEY_PEM"]
+
+    http_client = KalshiHttpClient(
+        base_url="https://trading-api.kalshi.com/trade-api/v2",
+        api_key=api_key,
+        private_key_pem=private_key_pem,
+    )
+
+    data_config = KalshiDataClientConfig(
+        api_key=api_key,
+        private_key_pem=private_key_pem,
+    )
+    provider = KalshiInstrumentProvider(http_client=http_client, config=data_config)
+    provider.load_series(SERIES)
+    instruments = provider.get_all()
+
+    if not instruments:
+        _logger.error("No open %s markets found — exiting", SERIES)
+        return
+
+    now_ns = int(datetime.now(timezone.utc).timestamp() * 1e9)
+    open_instruments = [
+        inst for inst in instruments
+        if (inst.activation_ns <= now_ns <= inst.expiration_ns) or inst.expiration_ns == 0
+    ]
+
+    if not open_instruments:
+        _logger.error("No currently-open %s markets after time filter — exiting", SERIES)
+        return
+
+    _logger.info("Found %d open %s markets", len(open_instruments), SERIES)
+    instrument_ids = [str(inst.id) for inst in open_instruments]
+
+    node_config = TradingNodeConfig(
+        trader_id="PAPER-TRADER-001",
+        logging=LoggingConfig(log_level="INFO"),
+        data_clients={"KALSHI": data_config},
+        exec_clients={"KALSHI": PaperExecClientConfig(starting_cash=STARTING_CAPITAL)},
+        data_engine=LiveDataEngineConfig(),
+        exec_engine=LiveExecEngineConfig(),
+    )
+
+    node = TradingNode(config=node_config)
+    node.add_data_client_factory("KALSHI", KalshiDataClientFactory)
+    node.add_exec_client_factory("KALSHI", PaperExecClientFactory)
+
+    for inst in open_instruments:
+        node.cache.add_instrument(inst)
+
+    strategy = ThresholdStrategy(
+        ThresholdConfig(
+            instrument_ids=instrument_ids,
+            strategy_id="threshold-paper-001",
+        )
+    )
+    node.trader.add_strategy(strategy)
+    node.build()
+
+    async def _run():
+        await run_state_server(node)
+        await node.run_async()
+
+    try:
+        asyncio.run(_run())
+    except KeyboardInterrupt:
+        pass
+    finally:
+        exec_client = paper_mod._paper_exec_client
+        if exec_client:
+            cash = exec_client.cash()
+            pnl = cash - STARTING_CAPITAL
+            fills = exec_client.fills()
+            print(f"\n{'='*50}")
+            print(f"  Final P&L: ${pnl:+.2f}")
+            print(f"  Cash:      ${cash:.2f}")
+            print(f"  Fills:     {len(fills)}")
+            print(f"  Positions: {len(exec_client.positions())}")
+            print(f"{'='*50}")
+
+
+if __name__ == "__main__":
+    main()
