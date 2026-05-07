@@ -53,10 +53,13 @@ class PaperExecutionClient(LiveExecutionClient):
     async def _disconnect(self) -> None:
         _logger.info("PaperExecutionClient disconnected")
 
-    def generate_order_status_reports(self, instrument_id=None, start=None, end=None, open_only=False):
+    async def generate_order_status_reports(self, instrument_id=None, start=None, end=None, open_only=False):
         return []
 
-    def generate_fill_reports(self, instrument_id=None, venue_order_id=None, start=None, end=None):
+    async def generate_fill_reports(self, instrument_id=None, venue_order_id=None, start=None, end=None):
+        return []
+
+    async def generate_position_status_reports(self, instrument_id=None, start=None, end=None):
         return []
 
     async def _submit_order(self, command) -> None:

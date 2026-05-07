@@ -147,23 +147,20 @@ def main() -> None:
         exec_engine=LiveExecEngineConfig(),
     )
 
-    node = TradingNode(config=node_config)
-    node.add_data_client_factory("KALSHI", KalshiDataClientFactory)
-    node.add_exec_client_factory("KALSHI", PaperExecClientFactory)
-
-    for inst in open_instruments:
-        node.cache.add_instrument(inst)
-
-    strategy = ThresholdStrategy(
-        ThresholdConfig(
-            instrument_ids=instrument_ids,
-            strategy_id="threshold-paper-001",
-        )
-    )
-    node.trader.add_strategy(strategy)
-    node.build()
-
     async def _run():
+        node = TradingNode(config=node_config)
+        node.add_data_client_factory("KALSHI", KalshiDataClientFactory)
+        node.add_exec_client_factory("KALSHI", PaperExecClientFactory)
+        for inst in open_instruments:
+            node.cache.add_instrument(inst)
+        strategy = ThresholdStrategy(
+            ThresholdConfig(
+                instrument_ids=instrument_ids,
+                strategy_id="threshold-paper-001",
+            )
+        )
+        node.trader.add_strategy(strategy)
+        node.build()
         runner = await run_state_server(node)
         try:
             await node.run_async()
