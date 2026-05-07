@@ -5,6 +5,8 @@ from datetime import datetime, timezone
 
 import httpx
 
+_MLB_SPORT_ID = 1  # MLB's sportId in the Stats API
+
 
 class MLBStatsClient:
     BASE_URL = "https://statsapi.mlb.com"
@@ -17,14 +19,14 @@ class MLBStatsClient:
 
     def get_schedule(self, date: str) -> list[dict]:
         """date: YYYY-MM-DD. Returns list of game dicts with gamePk, home/away city and name."""
-        resp = self._session.get("/api/v1/schedule", params={"sportId": 1, "date": date})
+        resp = self._session.get("/api/v1/schedule", params={"sportId": _MLB_SPORT_ID, "date": date})
         resp.raise_for_status()
         data = resp.json()
         games = []
         for date_entry in data.get("dates", []):
             for game in date_entry.get("games", []):
-                home = game["teams"]["home"]["team"]
-                away = game["teams"]["away"]["team"]
+                home = game.get("teams", {}).get("home", {}).get("team", {})
+                away = game.get("teams", {}).get("away", {}).get("team", {})
                 games.append({
                     "gamePk": game["gamePk"],
                     "home_city": home.get("locationName", ""),
@@ -62,9 +64,10 @@ class MLBStatsClient:
             end_time = play.get("about", {}).get("endTime", "")
             if not end_time:
                 continue
-            play_ns = int(
-                datetime.fromisoformat(end_time.replace("Z", "+00:00")).timestamp() * 1e9
-            )
+            dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+            if dt.tzinfo is None:
+                continue
+            play_ns = int(dt.timestamp()) * 1_000_000_000 + dt.microsecond * 1_000
             if since_ns <= play_ns <= until_ns:
                 result.append(play)
         return result

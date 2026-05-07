@@ -148,6 +148,27 @@ def test_get_scoring_plays_returns_empty_on_no_scoring_plays():
 
 
 @respx.mock
+def test_get_scoring_plays_ignores_out_of_bounds_index():
+    response = {
+        "gameData": {"status": {"abstractGameState": "Live"}},
+        "liveData": {
+            "linescore": {"currentInning": 1, "inningHalf": "Top"},
+            "plays": {
+                "allPlays": [],
+                "scoringPlays": [5],  # index 5 doesn't exist in empty allPlays
+            },
+        },
+    }
+    respx.get("https://statsapi.mlb.com/api/v1.1/game/77777/feed/live").mock(
+        return_value=httpx.Response(200, json=response)
+    )
+    client = MLBStatsClient()
+    plays = client.get_scoring_plays(77777, since_ns=0, until_ns=10**19)
+    client.close()
+    assert plays == []
+
+
+@respx.mock
 def test_http_error_propagates():
     respx.get("https://statsapi.mlb.com/api/v1/schedule").mock(
         return_value=httpx.Response(500)
@@ -181,6 +202,7 @@ async def test_async_get_game_state():
     state = await client.async_get_game_state(12345)
     client.close()
     assert state["half"] == "bottom"
+    assert state["status"] == "Live"
 
 
 @pytest.mark.asyncio
