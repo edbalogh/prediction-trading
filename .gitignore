@@ -10,3 +10,4 @@ build/
 .env
 scratch/
 .superpowers/
+dashboard/db/
