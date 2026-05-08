@@ -99,3 +99,15 @@ async def test_poller_marks_stopped_on_connection_error():
         await poller.poll_once("threshold", port=8767)
         snap = poller.get_snapshot("threshold")
         assert snap["status"] == "stopped"
+
+
+@pytest.mark.asyncio
+async def test_poller_marks_error_on_http_status_error():
+    with respx.mock:
+        respx.get("http://localhost:8766/state").mock(
+            return_value=httpx.Response(500, json={"detail": "internal error"})
+        )
+        poller = StatePoller()
+        await poller.poll_once("mlb_burst", port=8766)
+        snap = poller.get_snapshot("mlb_burst")
+        assert snap["status"] == "error"

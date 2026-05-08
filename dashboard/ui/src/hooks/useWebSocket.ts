@@ -8,9 +8,16 @@ const RECONNECT_MS = 2_000;
 export function useWebSocket(onMessage: (msg: WsMessage) => void): void {
   const wsRef = useRef<WebSocket | null>(null);
   const onMessageRef = useRef(onMessage);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   onMessageRef.current = onMessage;
 
   const connect = useCallback(() => {
+    // Cancel any pending reconnect before starting a new connection
+    if (timerRef.current !== null) {
+      clearTimeout(timerRef.current);
+      timerRef.current = null;
+    }
+
     const ws = new WebSocket(WS_URL);
     wsRef.current = ws;
 
@@ -24,7 +31,7 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void): void {
     };
 
     ws.onclose = () => {
-      setTimeout(connect, RECONNECT_MS);
+      timerRef.current = setTimeout(connect, RECONNECT_MS);
     };
 
     ws.onerror = () => {
@@ -35,6 +42,11 @@ export function useWebSocket(onMessage: (msg: WsMessage) => void): void {
   useEffect(() => {
     connect();
     return () => {
+      // Cancel pending reconnect and close connection on unmount
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
       wsRef.current?.close();
     };
   }, [connect]);

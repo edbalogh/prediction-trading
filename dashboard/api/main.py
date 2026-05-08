@@ -31,10 +31,15 @@ def create_app(poller: StatePoller | None = None) -> FastAPI:
             await _poller.start(STRATEGIES)
 
             async def _push_loop() -> None:
+                _WS_HISTORY_LIMIT = 300
                 while True:
                     snapshots = _poller.all_snapshots()
                     if snapshots:
-                        await ws_manager.broadcast({"snapshots": snapshots})
+                        trimmed = [
+                            {**snap, "equity_history": snap["equity_history"][-_WS_HISTORY_LIMIT:]}
+                            for snap in snapshots
+                        ]
+                        await ws_manager.broadcast({"snapshots": trimmed})
                     await asyncio.sleep(1.0)
 
             push_task = asyncio.create_task(_push_loop())

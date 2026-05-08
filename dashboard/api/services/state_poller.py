@@ -91,6 +91,24 @@ def _stopped_snapshot(strategy: str, mode: str) -> dict[str, Any]:
     }
 
 
+def _error_snapshot(strategy: str, mode: str) -> dict[str, Any]:
+    return {
+        "strategy": strategy,
+        "mode": mode,
+        "status": "error",
+        "ts": int(time.time()),
+        "equity": None,
+        "starting_capital": None,
+        "realized_pnl": None,
+        "unrealized_pnl": None,
+        "total_trades": None,
+        "win_rate": None,
+        "positions": [],
+        "recent_fills": [],
+        "equity_history": [],
+    }
+
+
 class StatePoller:
     """
     Polls each registered strategy's /state HTTP endpoint.
@@ -114,8 +132,10 @@ class StatePoller:
             snap = normalize_state(strategy, mode, raw, history)
             self._equity_history[strategy] = snap["equity_history"]
             self._snapshots[strategy] = snap
-        except (httpx.ConnectError, httpx.TimeoutException, httpx.HTTPStatusError):
+        except (httpx.ConnectError, httpx.TimeoutException):
             self._snapshots[strategy] = _stopped_snapshot(strategy, mode)
+        except httpx.HTTPStatusError:
+            self._snapshots[strategy] = _error_snapshot(strategy, mode)
 
     def get_snapshot(self, strategy: str) -> dict | None:
         return self._snapshots.get(strategy)

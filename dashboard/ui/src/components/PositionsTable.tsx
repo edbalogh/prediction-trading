@@ -35,9 +35,15 @@ export function PositionsTable({ positions }: Props) {
             <tr key={p.ticker} className="border-b border-[#f8f8fc] last:border-0">
               <td className="py-1.5 font-mono font-semibold text-accent text-[11px]">{p.ticker}</td>
               <td className="py-1.5 text-right">
-                <span className="bg-[#f0fdf4] text-profit text-[9px] font-bold px-1.5 py-0.5 rounded">
-                  YES
-                </span>
+                {p.qty > 0 ? (
+                  <span className="bg-[#f0fdf4] text-profit text-[9px] font-bold px-1.5 py-0.5 rounded">
+                    YES
+                  </span>
+                ) : (
+                  <span className="bg-[#fef2f2] text-loss text-[9px] font-bold px-1.5 py-0.5 rounded">
+                    NO
+                  </span>
+                )}
               </td>
               <td className="py-1.5 text-right text-text-primary">{p.qty}</td>
               <td className="py-1.5 text-right text-text-primary">${p.avg_px.toFixed(2)}</td>

@@ -12,9 +12,10 @@ if [[ "$1" == "--dev" ]]; then
   # Start FastAPI in background
   uvicorn dashboard.api.main:app --reload --port 8000 &
   API_PID=$!
+  trap "kill $API_PID 2>/dev/null" EXIT
   # Start Vite dev server
   cd "$UI_DIR" && npm run dev
-  kill "$API_PID"
+  kill "$API_PID" 2>/dev/null || true
 else
   echo "Building UI..."
   cd "$UI_DIR" && npm run build
