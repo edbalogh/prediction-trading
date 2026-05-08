@@ -1,35 +1,52 @@
+# dashboard/api/main.py
 from __future__ import annotations
 
+import asyncio
 import logging
 from contextlib import asynccontextmanager
+from pathlib import Path
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from pathlib import Path
 
 from dashboard.api.config import STRATEGIES
 from dashboard.api.routes.strategies import router as strategies_router
-from dashboard.api.routes.ws import router as ws_router
+from dashboard.api.routes.ws import router as ws_router, manager as ws_manager
 from dashboard.api.services.state_poller import StatePoller
 
 _logger = logging.getLogger(__name__)
 
 
 def create_app(poller: StatePoller | None = None) -> FastAPI:
-    """
-    Factory used both by the production server and tests.
-    Tests pass a mock poller; production creates a real one.
-    """
     _poller = poller or StatePoller()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.poller = _poller
+
+        push_task: asyncio.Task | None = None
+
         if poller is None:
-            # Only start polling when running for real (not in tests)
             await _poller.start(STRATEGIES)
+
+            async def _push_loop() -> None:
+                while True:
+                    snapshots = _poller.all_snapshots()
+                    if snapshots:
+                        await ws_manager.broadcast({"snapshots": snapshots})
+                    await asyncio.sleep(1.0)
+
+            push_task = asyncio.create_task(_push_loop())
+
         yield
+
+        if push_task:
+            push_task.cancel()
+            try:
+                await push_task
+            except asyncio.CancelledError:
+                pass
         if poller is None:
             await _poller.stop()
 
@@ -37,7 +54,7 @@ def create_app(poller: StatePoller | None = None) -> FastAPI:
 
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["*"],   # tightened in Stage 4 auth
+        allow_origins=["*"],
         allow_methods=["*"],
         allow_headers=["*"],
     )
@@ -45,7 +62,6 @@ def create_app(poller: StatePoller | None = None) -> FastAPI:
     app.include_router(strategies_router, prefix="/api")
     app.include_router(ws_router)
 
-    # Serve built React app (built in Task 15; skip if not yet built)
     static_dir = Path(__file__).parent.parent / "ui" / "dist"
     if static_dir.exists():
         app.mount("/", StaticFiles(directory=str(static_dir), html=True), name="static")
