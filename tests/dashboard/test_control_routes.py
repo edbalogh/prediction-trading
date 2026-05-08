@@ -13,8 +13,11 @@ from dashboard.api.services.process_mgr import ProcessManager
 def _make_test_client(process_mgr=None, poller=None):
     mock_poller = poller or MagicMock(spec=StatePoller)
     mock_poller.get_snapshot.return_value = None
-    mock_mgr = process_mgr or MagicMock(spec=ProcessManager)
-    mock_mgr.is_running.return_value = False
+    if process_mgr is None:
+        mock_mgr = MagicMock(spec=ProcessManager)
+        mock_mgr.is_running.return_value = False
+    else:
+        mock_mgr = process_mgr
     app = create_app(poller=mock_poller, process_mgr=mock_mgr)
     return TestClient(app)
 

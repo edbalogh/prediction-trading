@@ -118,6 +118,7 @@ class StatePoller:
     def __init__(self) -> None:
         self._snapshots: dict[str, dict] = {}
         self._equity_history: dict[str, list[dict]] = {}
+        self._modes: dict[str, str] = {}
         self._client = httpx.AsyncClient(timeout=2.0)
         self._task: asyncio.Task | None = None
 
@@ -143,16 +144,19 @@ class StatePoller:
     def all_snapshots(self) -> list[dict]:
         return list(self._snapshots.values())
 
+    def set_mode(self, strategy: str, mode: str) -> None:
+        self._modes[strategy] = mode
+
+    def clear_mode(self, strategy: str) -> None:
+        self._modes.pop(strategy, None)
+
     async def start(self, strategies: dict[str, dict], poll_interval: float = 1.0) -> None:
         """Start background polling loop for all registered strategies."""
         async def _loop() -> None:
             while True:
                 for name, cfg in strategies.items():
-                    await self.poll_once(
-                        name,
-                        port=cfg["state_port"],
-                        mode="paper",  # Stage 2 will detect live vs paper
-                    )
+                    mode = self._modes.get(name, "paper")
+                    await self.poll_once(name, port=cfg["state_port"], mode=mode)
                 await asyncio.sleep(poll_interval)
 
         self._task = asyncio.create_task(_loop())
