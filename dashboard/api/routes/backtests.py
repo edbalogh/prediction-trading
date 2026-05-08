@@ -38,7 +38,7 @@ async def start_backtest(name: str, request: Request, body: dict = Body(...)) ->
         "overrides": body.get("overrides", {}),
     }
     run_id = await runner.start(name, Path(script), ROOT_DIR, params)
-    return {"run_id": run_id, "status": "running"}
+    return {"run_id": run_id, "status": "pending"}
 
 
 @router.get("/strategies/{name}/backtests")

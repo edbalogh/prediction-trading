@@ -123,3 +123,17 @@ def test_export_not_done_returns_409():
     client = _make_client(runner=runner)
     resp = client.get("/api/backtests/abc/export")
     assert resp.status_code == 409
+
+
+def test_start_backtest_no_script_returns_400(monkeypatch):
+    import dashboard.api.routes.backtests as routes_module
+    from dashboard.api.config import STRATEGIES
+    patched = {**STRATEGIES}
+    patched["mlb_burst"] = {k: v for k, v in STRATEGIES.get("mlb_burst", {}).items() if k != "backtest_script"}
+    monkeypatch.setattr(routes_module, "STRATEGIES", patched)
+    client = _make_client()
+    resp = client.post(
+        "/api/strategies/mlb_burst/backtests",
+        json={"start_date": "2025-01-01", "end_date": "2025-03-31", "overrides": {}},
+    )
+    assert resp.status_code == 400
