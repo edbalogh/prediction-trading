@@ -278,7 +278,7 @@ def _half_inning_at(game_pk: int, ts_ns: int) -> str | None:
 
 # ── Signal replay with bottom-half filter ──────────────────────────────────────
 
-from strategies.mlb_burst_signals import detect_sweep, confirm_w1, SweepResult
+from strategies.mlb_burst.mlb_burst_signals import detect_sweep, confirm_w1, SweepResult
 
 print("Replaying signals (bottom-half filter applied)...")
 t2 = time.time()
@@ -429,7 +429,13 @@ worst_bail = df.loc[df["bail_pnl"].idxmin()]
 import plotly.graph_objects as go
 import plotly.io as pio
 
+_plotlyjs_included = False
+
 def _fig_to_div(fig) -> str:
+    global _plotlyjs_included
+    if not _plotlyjs_included:
+        _plotlyjs_included = True
+        return pio.to_html(fig, full_html=False, include_plotlyjs=True)
     return pio.to_html(fig, full_html=False, include_plotlyjs=False)
 
 
@@ -559,7 +565,6 @@ html = f"""<!DOCTYPE html>
 <head>
 <meta charset="UTF-8">
 <title>MLB Burst Backtest</title>
-<script src="https://cdn.plot.ly/plotly-{plotly.__version__}.min.js"></script>
 <style>
   body {{ font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
           background: #f0f2f5; margin: 0; padding: 20px; color: #222; }}

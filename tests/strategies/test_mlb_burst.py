@@ -211,7 +211,7 @@ def test_w1_window_expiry_clears_pending_sweep():
     buf = strat._buffers[ticker]
 
     sweep_end_ts = ms(1000)
-    from strategies.mlb_burst_signals import SweepResult
+    from strategies.mlb_burst.mlb_burst_signals import SweepResult
     strat._pending_sweeps[ticker] = SweepResult(
         side="YES", end_price=0.40, end_ts=sweep_end_ts
     )
@@ -231,7 +231,7 @@ async def test_w1_confirms_and_clears_pending_sweep():
 
     sweep_end_ts = ms(0)
     sweep_end_price = 0.40
-    from strategies.mlb_burst_signals import SweepResult
+    from strategies.mlb_burst.mlb_burst_signals import SweepResult
     strat._pending_sweeps[ticker] = SweepResult(
         side="YES", end_price=sweep_end_price, end_ts=sweep_end_ts
     )
@@ -259,7 +259,7 @@ async def test_skips_entry_when_already_entered_game():
     strat._entered_games.add(12345)  # game already entered
 
     sweep_end_ts = ms(0)
-    from strategies.mlb_burst_signals import SweepResult
+    from strategies.mlb_burst.mlb_burst_signals import SweepResult
     strat._pending_sweeps[ticker] = SweepResult(
         side="YES", end_price=0.40, end_ts=sweep_end_ts
     )
@@ -281,7 +281,7 @@ async def test_skips_entry_when_mlb_stats_game_state_fails():
         side_effect=RuntimeError("connection timeout")
     )
 
-    from strategies.mlb_burst_signals import SweepResult
+    from strategies.mlb_burst.mlb_burst_signals import SweepResult
     strat._pending_sweeps[ticker] = SweepResult(
         side="YES", end_price=0.40, end_ts=ms(0)
     )
@@ -305,7 +305,7 @@ async def test_skips_entry_when_top_half():
         return_value={"half": "top", "inning": 3, "status": "Live"}
     )
 
-    from strategies.mlb_burst_signals import SweepResult
+    from strategies.mlb_burst.mlb_burst_signals import SweepResult
     strat._pending_sweeps[ticker] = SweepResult(
         side="YES", end_price=0.40, end_ts=ms(0)
     )
@@ -332,7 +332,7 @@ async def test_hold_or_bail_sells_when_no_scoring_play():
     strat.submit_order = lambda o: submitted.append(o)
 
     # Patch asyncio.sleep to avoid 45s wait
-    import strategies.mlb_burst as burst_mod
+    import strategies.mlb_burst.mlb_burst as burst_mod
     original_sleep = asyncio.sleep
 
     async def fast_sleep(n):
@@ -359,7 +359,7 @@ async def test_hold_or_bail_holds_when_scoring_play_found():
     submitted = []
     strat.submit_order = lambda o: submitted.append(o)
 
-    import strategies.mlb_burst as burst_mod
+    import strategies.mlb_burst.mlb_burst as burst_mod
     original_sleep = asyncio.sleep
 
     async def fast_sleep(n):
@@ -385,7 +385,7 @@ async def test_hold_or_bail_bails_on_mlb_stats_exception():
     submitted = []
     strat.submit_order = lambda o: submitted.append(o)
 
-    import strategies.mlb_burst as burst_mod
+    import strategies.mlb_burst.mlb_burst as burst_mod
     original_sleep = asyncio.sleep
 
     async def fast_sleep(n):

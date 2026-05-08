@@ -59,7 +59,7 @@ def _build_state_response(node: TradingNode) -> dict:
     cash = exec_client.cash()
     raw_positions = exec_client.positions()
 
-    mtm = 0.0
+    unrealized_pnl = 0.0
     positions_out = {}
     kalshi_venue = Venue("KALSHI")
     for ticker, pos_info in raw_positions.items():
@@ -67,21 +67,24 @@ def _build_state_response(node: TradingNode) -> dict:
         last_price_obj = cache.price(iid, PriceType.LAST)
         last_px = last_price_obj.as_double() if last_price_obj is not None else pos_info["avg_px"]
         qty = pos_info["qty"]
-        mtm += qty * last_px
+        position_unrealized = (last_px - pos_info["avg_px"]) * qty
+        unrealized_pnl += position_unrealized
         positions_out[ticker] = {
             "qty": qty,
             "avg_px": round(pos_info["avg_px"], 4),
             "last_px": round(last_px, 4),
-            "mtm_pnl": round((last_px - pos_info["avg_px"]) * qty, 4),
+            "unrealized_pnl": round(position_unrealized, 4),
         }
 
-    equity = cash + mtm
-    pnl = equity - STARTING_CAPITAL
+    realized_pnl = exec_client.realized_pnl()
+    total_pnl = realized_pnl + unrealized_pnl
 
     return {
-        "equity": round(equity, 4),
+        "equity": round(STARTING_CAPITAL + total_pnl, 4),
         "starting_capital": STARTING_CAPITAL,
-        "pnl": round(pnl, 4),
+        "pnl": round(total_pnl, 4),
+        "realized_pnl": round(realized_pnl, 4),
+        "unrealized_pnl": round(unrealized_pnl, 4),
         "positions": positions_out,
         "fills": exec_client.fills()[-20:],
         "ts": int(time.time()),
@@ -101,7 +104,7 @@ async def run_state_server(node: TradingNode) -> web.AppRunner:
     app.router.add_get("/state", handle_state)
     runner = web.AppRunner(app)
     await runner.setup()
-    site = web.TCPSite(runner, "localhost", STATE_PORT)
+    site = web.TCPSite(runner, "localhost", STATE_PORT, reuse_address=True)
     await site.start()
     _logger.info("StateServer listening on http://localhost:%d/state", STATE_PORT)
     return runner
@@ -124,7 +127,7 @@ def main() -> None:
     provider = KalshiInstrumentProvider(http_client=http_client, config=data_config)
     provider.load_series(SERIES)
     http_client.close()
-    instruments = provider.get_all()
+    instruments = provider.list_all()
 
     if not instruments:
         _logger.error("No open %s markets found — exiting", SERIES)
@@ -147,7 +150,11 @@ def main() -> None:
         trader_id="PAPER-TRADER-001",
         logging=LoggingConfig(log_level="INFO"),
         data_clients={"KALSHI": data_config},
-        exec_clients={"KALSHI": PaperExecClientConfig(starting_cash=STARTING_CAPITAL)},
+        exec_clients={"KALSHI": PaperExecClientConfig(
+            starting_cash=STARTING_CAPITAL,
+            api_key=api_key,
+            private_key_pem=private_key_pem,
+        )},
         data_engine=LiveDataEngineConfig(),
         exec_engine=LiveExecEngineConfig(),
     )
@@ -179,18 +186,16 @@ def main() -> None:
     finally:
         exec_client = paper_mod._paper_exec_client
         if exec_client:
-            cash = exec_client.cash()
             fills = exec_client.fills()
             open_positions = exec_client.positions()
-            mtm = sum(p["qty"] * p["avg_px"] for p in open_positions.values())
-            equity = cash + mtm
-            pnl = equity - STARTING_CAPITAL
+            realized = exec_client.realized_pnl()
+            open_cost_basis = sum(p["avg_px"] * p["qty"] for p in open_positions.values())
+            equity = STARTING_CAPITAL + realized + open_cost_basis
             print(f"\n{'='*50}")
-            print(f"  Final P&L: ${pnl:+.2f}")
-            print(f"  Equity:    ${equity:.2f}")
-            print(f"  Cash:      ${cash:.2f}")
-            print(f"  Fills:     {len(fills)}")
-            print(f"  Positions: {len(open_positions)}")
+            print(f"  Realized P&L:    ${realized:+.2f}")
+            print(f"  Open positions:  {len(open_positions)} (${open_cost_basis:.2f} at cost)")
+            print(f"  Equity (at cost):${equity:.2f}")
+            print(f"  Fills:           {len(fills)}")
             print(f"{'='*50}")
 
 

@@ -14,7 +14,7 @@ from nautilus_trader.trading.strategy import Strategy
 
 from adapters.kalshi.constants import KALSHI_VENUE
 from adapters.kalshi.factories import kalshi_ticker_to_instrument_id, market_to_binary_option
-from strategies.mlb_burst_signals import SweepResult, confirm_w1, detect_sweep
+from .mlb_burst_signals import SweepResult, confirm_w1, detect_sweep
 
 _logger = logging.getLogger(__name__)
 

@@ -8,7 +8,7 @@ from nautilus_trader.model.enums import AggressorSide
 from nautilus_trader.model.identifiers import InstrumentId, Symbol, TradeId, Venue
 from nautilus_trader.model.objects import Price, Quantity
 
-from strategies.mlb_burst_signals import SweepResult, detect_sweep, confirm_w1
+from strategies.mlb_burst.mlb_burst_signals import SweepResult, detect_sweep, confirm_w1
 
 KALSHI = Venue("KALSHI")
 IID = InstrumentId(Symbol("KXMLBGAME-26MAY01-AZ"), KALSHI)
