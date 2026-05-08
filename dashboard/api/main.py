@@ -11,8 +11,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 
 from dashboard.api.config import STRATEGIES
+from dashboard.api.db import database
+from dashboard.api.routes.backtests import router as backtests_router
 from dashboard.api.routes.strategies import router as strategies_router
 from dashboard.api.routes.ws import router as ws_router, manager as ws_manager
+from dashboard.api.services.backtest_runner import BacktestRunner
 from dashboard.api.services.process_mgr import ProcessManager
 from dashboard.api.services.state_poller import StatePoller
 
@@ -22,18 +25,22 @@ _logger = logging.getLogger(__name__)
 def create_app(
     poller: StatePoller | None = None,
     process_mgr: ProcessManager | None = None,
+    backtest_runner: BacktestRunner | None = None,
 ) -> FastAPI:
     _poller = poller or StatePoller()
     _process_mgr = process_mgr or ProcessManager()
+    _backtest_runner = backtest_runner or BacktestRunner()
 
     @asynccontextmanager
     async def lifespan(app: FastAPI):
         app.state.poller = _poller
         app.state.process_mgr = _process_mgr
+        app.state.backtest_runner = _backtest_runner
+        database.init_db()
 
         push_task: asyncio.Task | None = None
 
-        if poller is None:  # production path only
+        if poller is None:
             await _poller.start(STRATEGIES)
 
             async def _push_loop() -> None:
@@ -63,10 +70,10 @@ def create_app(
 
     app = FastAPI(title="nautilus-plus dashboard", lifespan=lifespan)
 
-    # Set state eagerly so routes work even when lifespan hasn't been entered
-    # (e.g. TestClient used without a context manager in tests).
+    # Eager state init so TestClient works without lifespan context
     app.state.poller = _poller
     app.state.process_mgr = _process_mgr
+    app.state.backtest_runner = _backtest_runner
 
     app.add_middleware(
         CORSMiddleware,
@@ -76,6 +83,7 @@ def create_app(
     )
 
     app.include_router(strategies_router, prefix="/api")
+    app.include_router(backtests_router, prefix="/api")
     app.include_router(ws_router)
 
     static_dir = Path(__file__).parent.parent / "ui" / "dist"

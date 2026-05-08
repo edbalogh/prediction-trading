@@ -16,7 +16,8 @@ def _make_client(runner: MagicMock | None = None) -> TestClient:
     mock_mgr.is_running.return_value = False
     mock_mgr.get_mode.return_value = None
     mock_runner = runner or MagicMock(spec=BacktestRunner)
-    mock_runner.is_running.return_value = False
+    if runner is None:
+        mock_runner.is_running.return_value = False
     app = create_app(poller=mock_poller, process_mgr=mock_mgr, backtest_runner=mock_runner)
     return TestClient(app)
 

@@ -41,6 +41,9 @@ def validate_config(values: dict[str, Any], schema: list[dict]) -> list[str]:
         if ftype == "float" and not isinstance(val, (int, float)):
             errors.append(f"{key}: expected float, got {type(val).__name__}")
             continue
+        if ftype == "string" and not isinstance(val, str):
+            errors.append(f"{key}: expected string, got {type(val).__name__}")
+            continue
         if isinstance(val, (int, float)):
             if "min" in field and val < field["min"]:
                 errors.append(f"{key}: {val} is below minimum {field['min']}")
