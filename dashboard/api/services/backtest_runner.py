@@ -42,7 +42,12 @@ class BacktestRunner:
             (run_id, strategy, now, "running", json.dumps(params)),
         )
         self._running[strategy] = run_id
-        asyncio.create_task(self._run(run_id, strategy, script, cwd, params))
+        task = asyncio.create_task(self._run(run_id, strategy, script, cwd, params))
+        task.add_done_callback(
+            lambda t: _logger.error("Backtest task raised", exc_info=t.exception())
+            if not t.cancelled() and t.exception()
+            else None
+        )
         return run_id
 
     async def _run(
@@ -81,6 +86,7 @@ class BacktestRunner:
                     result_data = event
         finally:
             await proc.wait()
+            self._running.pop(strategy, None)
 
         now = int(time.time())
         if result_data and proc.returncode == 0:
@@ -94,7 +100,6 @@ class BacktestRunner:
                 "UPDATE backtest_runs SET status=?, finished_at=? WHERE id=?",
                 ("error", now, run_id),
             )
-        self._running.pop(strategy, None)
         _logger.info("Backtest %s finished: %s", run_id, "done" if result_data else "error")
 
     async def list_runs(self, strategy: str) -> list[dict[str, Any]]:
