@@ -1,5 +1,5 @@
 // dashboard/ui/src/api/client.ts
-import type { StrategySummary, StrategyConfig } from "../types";
+import type { StrategySummary, StrategyConfig, BacktestRun, BacktestDetail } from "../types";
 
 const BASE = "/api";
 
@@ -11,6 +11,19 @@ async function get<T>(path: string): Promise<T> {
 
 async function post<T>(path: string): Promise<T> {
   const resp = await fetch(`${BASE}${path}`, { method: "POST" });
+  if (!resp.ok) {
+    const detail = await resp.json().catch(() => ({}));
+    throw new Error(`POST ${path} failed: ${resp.status} — ${JSON.stringify(detail)}`);
+  }
+  return resp.json() as Promise<T>;
+}
+
+async function postJson<T>(path: string, body: unknown): Promise<T> {
+  const resp = await fetch(`${BASE}${path}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
   if (!resp.ok) {
     const detail = await resp.json().catch(() => ({}));
     throw new Error(`POST ${path} failed: ${resp.status} — ${JSON.stringify(detail)}`);
@@ -42,4 +55,14 @@ export const api = {
     name: string,
     values: Record<string, number | boolean | string>
   ): Promise<{ status: string }> => put(`/strategies/${name}/config`, values),
+  startBacktest: (
+    name: string,
+    body: { start_date: string; end_date: string; overrides: Record<string, number | boolean | string> }
+  ): Promise<{ run_id: string; status: string }> =>
+    postJson(`/strategies/${name}/backtests`, body),
+  listBacktests: (name: string): Promise<BacktestRun[]> =>
+    get(`/strategies/${name}/backtests`),
+  getBacktest: (runId: string): Promise<BacktestDetail> =>
+    get(`/backtests/${runId}`),
+  exportBacktestUrl: (runId: string): string => `${BASE}/backtests/${runId}/export`,
 };

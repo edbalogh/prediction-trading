@@ -70,3 +70,41 @@ export interface StrategyConfig {
   schema: ConfigField[];
   values: Record<string, number | boolean | string>;
 }
+
+export interface BacktestKpis {
+  total_trades: number;
+  win_rate: number;
+  realized_pnl: number;
+  max_drawdown: number;
+  sharpe: number;
+}
+
+export interface BacktestTrade {
+  ts: number;
+  ticker: string;
+  side: "YES" | "NO";
+  qty: number;
+  price: number;
+  pnl: number;
+}
+
+export interface BacktestRun {
+  run_id: string;
+  strategy: string;
+  started_at: number;
+  finished_at: number | null;
+  status: "pending" | "running" | "done" | "error";
+  progress_pct: number;
+  params: {
+    start_date: string;
+    end_date: string;
+    overrides: Record<string, number | boolean | string>;
+  };
+}
+
+export interface BacktestDetail extends BacktestRun {
+  progress_msg: string | null;
+  kpis: BacktestKpis | null;
+  trades: BacktestTrade[] | null;
+  equity_curve: EquityPoint[] | null;
+}
