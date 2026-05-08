@@ -55,3 +55,18 @@ export interface StrategySummary {
 export interface WsMessage {
   snapshots: StrategySnapshot[];
 }
+
+export interface ConfigField {
+  key: string;
+  label: string;
+  type: "int" | "float" | "bool" | "string";
+  default: number | boolean | string;
+  min?: number;
+  max?: number;
+}
+
+export interface StrategyConfig {
+  strategy: string;
+  schema: ConfigField[];
+  values: Record<string, number | boolean | string>;
+}
