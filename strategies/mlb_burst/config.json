@@ -1,0 +1,11 @@
+{
+  "sweep_min_spread_cents": 3,
+  "sweep_min_fills": 2,
+  "sweep_max_duration_s": 0.5,
+  "w1_window_start_s": 0.3,
+  "w1_window_end_s": 3.0,
+  "w1_min_trades": 2,
+  "w1_same_dir_pct": 0.6,
+  "bail_seconds": 45,
+  "max_notional_usd": 1.0
+}
