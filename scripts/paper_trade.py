@@ -15,6 +15,7 @@ import logging
 import os
 import time
 from datetime import datetime, timezone
+from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -48,6 +49,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s — %(message)s",
 )
 _logger = logging.getLogger(__name__)
+
+
+def _load_strategy_config() -> dict:
+    """Load trading parameters from strategies/threshold/config.json if it exists."""
+    config_path = Path(__file__).parent.parent / "strategies" / "threshold" / "config.json"
+    if config_path.exists():
+        try:
+            return json.loads(config_path.read_text())
+        except Exception:
+            _logger.warning("Failed to load threshold config.json, using defaults")
+    return {}
 
 
 def _build_state_response(node: TradingNode) -> dict:
@@ -165,10 +177,14 @@ def main() -> None:
         node.add_exec_client_factory("KALSHI", PaperExecClientFactory)
         for inst in open_instruments:
             node.cache.add_instrument(inst)
+        _cfg = _load_strategy_config()
         strategy = ThresholdStrategy(
             ThresholdConfig(
                 instrument_ids=instrument_ids,
                 strategy_id="threshold-paper-001",
+                buy_threshold=_cfg.get("buy_threshold", 0.25),
+                sell_threshold=_cfg.get("sell_threshold", 0.75),
+                trade_size=_cfg.get("trade_size", 5),
             )
         )
         node.trader.add_strategy(strategy)

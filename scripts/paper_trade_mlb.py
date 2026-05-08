@@ -14,6 +14,7 @@ import json
 import logging
 import os
 import time
+from pathlib import Path
 
 from dotenv import load_dotenv
 load_dotenv()
@@ -46,6 +47,17 @@ logging.basicConfig(
     format="%(asctime)s %(levelname)s %(name)s — %(message)s",
 )
 _logger = logging.getLogger(__name__)
+
+
+def _load_strategy_config() -> dict:
+    """Load trading parameters from strategies/mlb_burst/config.json if it exists."""
+    config_path = Path(__file__).parent.parent / "strategies" / "mlb_burst" / "config.json"
+    if config_path.exists():
+        try:
+            return json.loads(config_path.read_text())
+        except Exception:
+            _logger.warning("Failed to load mlb_burst config.json, using defaults")
+    return {}
 
 
 def _build_state_response(node: TradingNode, strategy: MLBBurstStrategy) -> dict:
@@ -144,8 +156,20 @@ def main() -> None:
         node.add_data_client_factory("KALSHI", KalshiDataClientFactory)
         node.add_exec_client_factory("KALSHI", PaperExecClientFactory)
 
+        _cfg = _load_strategy_config()
         strategy = MLBBurstStrategy(
-            MLBBurstConfig(strategy_id="mlb-burst-paper-001"),
+            MLBBurstConfig(
+                strategy_id="mlb-burst-paper-001",
+                sweep_min_spread_cents=_cfg.get("sweep_min_spread_cents", 3),
+                sweep_min_fills=_cfg.get("sweep_min_fills", 2),
+                sweep_max_duration_s=_cfg.get("sweep_max_duration_s", 0.5),
+                w1_window_start_s=_cfg.get("w1_window_start_s", 0.3),
+                w1_window_end_s=_cfg.get("w1_window_end_s", 3.0),
+                w1_min_trades=_cfg.get("w1_min_trades", 2),
+                w1_same_dir_pct=_cfg.get("w1_same_dir_pct", 0.60),
+                bail_seconds=_cfg.get("bail_seconds", 45),
+                max_notional_usd=_cfg.get("max_notional_usd", 1.00),
+            ),
             kalshi_http=http_client,
             mlb_stats=mlb_stats,
         )
