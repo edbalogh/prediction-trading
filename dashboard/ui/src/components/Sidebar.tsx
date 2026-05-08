@@ -6,7 +6,8 @@ interface Props {
   strategies: StrategySummary[];
 }
 
-function StatusDot({ status }: { status: string }) {
+function StatusDot({ status, mode }: { status: string; mode: string }) {
+  const key = status === "running" && mode === "paper" ? "paper" : status;
   const colors: Record<string, string> = {
     running: "bg-profit shadow-[0_0_5px_rgba(22,163,74,0.6)]",
     paper:   "bg-paper  shadow-[0_0_5px_rgba(37,99,235,0.4)]",
@@ -15,7 +16,7 @@ function StatusDot({ status }: { status: string }) {
   };
   return (
     <span
-      className={`ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors[status] ?? colors.stopped}`}
+      className={`ml-auto w-1.5 h-1.5 rounded-full flex-shrink-0 ${colors[key] ?? colors.stopped}`}
     />
   );
 }
@@ -77,7 +78,7 @@ export function Sidebar({ strategies }: Props) {
             to={`/strategy/${s.name}`}
             icon={s.icon}
             label={s.display_name}
-            indicator={<StatusDot status={s.status} />}
+            indicator={<StatusDot status={s.status} mode={s.mode} />}
           />
         ))}
       </div>
