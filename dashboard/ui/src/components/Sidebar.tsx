@@ -68,30 +68,25 @@ export function Sidebar({ strategies }: Props) {
       </div>
 
       {/* Strategies */}
-      <div className="pt-3">
+      <div className="pt-3 flex-1 overflow-y-auto">
         <p className="px-4 pb-1 text-[9.5px] font-bold text-text-muted uppercase tracking-widest">
           Strategies
         </p>
         {strategies.map((s) => (
-          <SidebarLink
-            key={s.name}
-            to={`/strategy/${s.name}`}
-            icon={s.icon}
-            label={s.display_name}
-            indicator={<StatusDot status={s.status} mode={s.mode} />}
-          />
+          <div key={s.name}>
+            <SidebarLink
+              to={`/strategy/${s.name}`}
+              icon={s.icon}
+              label={s.display_name}
+              indicator={<StatusDot status={s.status} mode={s.mode} />}
+            />
+            <SidebarLink
+              to={`/strategy/${s.name}/backtests`}
+              icon="▶"
+              label="Backtests"
+            />
+          </div>
         ))}
-      </div>
-
-      <div className="my-2 mx-4 border-t border-sidebar-border" />
-
-      {/* Research */}
-      <div>
-        <p className="px-4 pb-1 text-[9.5px] font-bold text-text-muted uppercase tracking-widest">
-          Research
-        </p>
-        <SidebarLink to="/backtest" icon="▶" label="Run Backtest" />
-        <SidebarLink to="/backtest/history" icon="⊡" label="Backtest History" />
       </div>
 
       {/* Footer */}

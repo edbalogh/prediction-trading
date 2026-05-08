@@ -3,18 +3,10 @@ import { BrowserRouter, Routes, Route, Navigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { Sidebar } from "./components/Sidebar";
 import { StrategyPage } from "./pages/StrategyPage";
+import { BacktestPage } from "./pages/BacktestPage";
 import { useStrategyState } from "./hooks/useStrategyState";
 import { api } from "./api/client";
 import type { StrategySummary } from "./types";
-
-function BacktestPlaceholder({ title }: { title: string }) {
-  return (
-    <div className="flex flex-col items-center justify-center h-full text-text-muted gap-2">
-      <p className="text-lg font-semibold">{title}</p>
-      <p className="text-sm">Coming in Stage 3</p>
-    </div>
-  );
-}
 
 export function App() {
   const [strategies, setStrategies] = useState<StrategySummary[]>([]);
@@ -52,8 +44,10 @@ export function App() {
               path="/strategy/:name"
               element={<StrategyPage strategies={strategies} snapshots={snapshots} />}
             />
-            <Route path="/backtest" element={<BacktestPlaceholder title="Run Backtest" />} />
-            <Route path="/backtest/history" element={<BacktestPlaceholder title="Backtest History" />} />
+            <Route
+              path="/strategy/:name/backtests"
+              element={<BacktestPage strategies={strategies} />}
+            />
           </Routes>
         </main>
       </div>
