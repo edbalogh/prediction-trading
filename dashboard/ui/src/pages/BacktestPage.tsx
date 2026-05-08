@@ -23,6 +23,16 @@ function ParamInput({
   value: number | boolean | string;
   onChange: (val: number | boolean | string) => void;
 }) {
+  if (field.type === "bool") {
+    return (
+      <input
+        type="checkbox"
+        checked={value as boolean}
+        onChange={(e) => onChange(e.target.checked)}
+        className="w-4 h-4 accent-accent cursor-pointer"
+      />
+    );
+  }
   if (field.type === "string") {
     return (
       <input
