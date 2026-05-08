@@ -9,3 +9,4 @@ build/
 *.egg
 .env
 scratch/
+.superpowers/

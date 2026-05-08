@@ -64,8 +64,15 @@ export function EquityChart({ history, startingCapital }: Props) {
           width={46}
         />
         <Tooltip
-          formatter={(val: number) => [formatDollar(val), "Equity"]}
-          labelFormatter={(ts: number) => formatTime(ts)}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          formatter={(val: any) => [
+            typeof val === "number" ? formatDollar(val as number) : String(val ?? ""),
+            "Equity",
+          ]}
+          // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          labelFormatter={(ts: any) =>
+            typeof ts === "number" ? formatTime(ts as number) : String(ts ?? "")
+          }
           contentStyle={{
             background: "#fff", border: "1px solid #e4e4f0",
             borderRadius: 8, fontSize: 11,
