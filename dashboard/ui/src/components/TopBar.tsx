@@ -4,6 +4,10 @@ import type { StrategySnapshot } from "../types";
 interface Props {
   snapshot: StrategySnapshot | null;
   displayName: string;
+  onEditConfig: () => void;
+  onStart: (mode: "paper" | "live") => void;
+  onStop: () => void;
+  isActionLoading?: boolean;
 }
 
 function StatusPill({ status, mode }: { status: string; mode: string }) {
@@ -11,6 +15,7 @@ function StatusPill({ status, mode }: { status: string; mode: string }) {
     running: { bg: "bg-[#f0fdf4]", text: "text-profit", border: "border-[#bbf7d0]", label: "● Running" },
     paper:   { bg: "bg-[#eff6ff]", text: "text-paper",  border: "border-[#bfdbfe]", label: "◎ Paper" },
     stopped: { bg: "bg-[#f5f5f8]", text: "text-text-muted", border: "border-card-border", label: "○ Stopped" },
+    error:   { bg: "bg-[#fef2f2]", text: "text-loss",   border: "border-[#fecaca]",   label: "⚠ Error" },
   };
   const key = status === "running" && mode === "paper" ? "paper" : status;
   const c = configs[key] ?? configs.stopped;
@@ -21,9 +26,10 @@ function StatusPill({ status, mode }: { status: string; mode: string }) {
   );
 }
 
-export function TopBar({ snapshot, displayName }: Props) {
+export function TopBar({ snapshot, displayName, onEditConfig, onStart, onStop, isActionLoading }: Props) {
   const mode = snapshot?.mode ?? "paper";
   const status = snapshot?.status ?? "stopped";
+  const isRunning = status === "running";
   const modeLabel = mode === "live" ? "Live" : "Paper";
 
   return (
@@ -36,19 +42,29 @@ export function TopBar({ snapshot, displayName }: Props) {
       </div>
       <div className="flex gap-2">
         <button
-          disabled
-          className="text-[11.5px] font-semibold px-3.5 py-1.5 rounded-lg border border-card-border text-text-secondary opacity-50 cursor-not-allowed"
-          title="Strategy control coming in Stage 2"
+          onClick={onEditConfig}
+          disabled={isActionLoading}
+          className="text-[11.5px] font-semibold px-3.5 py-1.5 rounded-lg border border-card-border text-text-secondary hover:bg-surface transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
         >
           Edit Config
         </button>
-        <button
-          disabled
-          className="text-[11.5px] font-semibold px-3.5 py-1.5 rounded-lg bg-[#fef2f2] text-loss border border-[#fecaca] opacity-50 cursor-not-allowed"
-          title="Strategy control coming in Stage 2"
-        >
-          Stop Strategy
-        </button>
+        {isRunning ? (
+          <button
+            onClick={onStop}
+            disabled={isActionLoading}
+            className="text-[11.5px] font-semibold px-3.5 py-1.5 rounded-lg bg-[#fef2f2] text-loss border border-[#fecaca] hover:bg-[#fee2e2] transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isActionLoading ? "Stopping…" : "Stop Strategy"}
+          </button>
+        ) : (
+          <button
+            onClick={() => onStart("paper")}
+            disabled={isActionLoading}
+            className="text-[11.5px] font-semibold px-3.5 py-1.5 rounded-lg bg-accent text-white hover:bg-accent-hover transition-colors disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {isActionLoading ? "Starting…" : "Start Paper"}
+          </button>
+        )}
       </div>
     </header>
   );
